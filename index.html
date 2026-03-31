@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Camera 3D Head Tracker</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="hud">
+        <p class="eyebrow">Webcam + 3D</p>
+        <h1>Muovi la testa, cambia la vista.</h1>
+        <p class="intro">
+          Il prototipo usa la webcam del Mac per stimare posizione e distanza del volto.
+          Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti
+          o allontanandoti cambi lo zoom.
+        </p>
+
+        <ul class="notes">
+          <li>Sposta il volto a destra o sinistra per ruotare la vista.</li>
+          <li>Alzati o abbassati per cambiare l'inclinazione della camera.</li>
+          <li>Avvicinati alla webcam per entrare nella scena, allontanati per uscirne.</li>
+          <li>Per test veloci, preferisci file `.glb`: sono più semplici da caricare in locale.</li>
+        </ul>
+      </aside>
+
+      <main class="stage">
+        <div id="scene-root"></div>
+
+        <div class="stage-tools">
+          <section class="preview-card">
+            <div>
+              <span class="status-label">Preview Tracking</span>
+              <strong>Webcam e landmark del volto</strong>
+            </div>
+
+            <div class="camera-panel">
+              <video id="webcam" autoplay muted playsinline></video>
+              <canvas id="webcam-overlay"></canvas>
+            </div>
+
+            <div class="toggle-row">
+              <span class="toggle-label">Landmark visibili</span>
+              <div class="toggle-pill" id="landmark-toggle">
+                <button id="landmarks-on" class="toggle-option is-active" type="button">Si</button>
+                <button id="landmarks-off" class="toggle-option" type="button">No</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="status-card">
+            <div>
+              <span class="status-label">Stato tracking</span>
+              <strong id="tracking-status">In attesa della webcam...</strong>
+            </div>
+            <button id="start-button" type="button">Avvia webcam</button>
+          </div>
+
+          <div class="metrics">
+            <div class="metric">
+              <span>X</span>
+              <strong id="metric-x">0.00</strong>
+            </div>
+            <div class="metric">
+              <span>Y</span>
+              <strong id="metric-y">0.00</strong>
+            </div>
+            <div class="metric">
+              <span>Distanza</span>
+              <strong id="metric-z">0.00</strong>
+            </div>
+          </div>
+
+          <section class="loader-card">
+            <div>
+              <span class="status-label">Modello 3D</span>
+              <strong id="model-status">Scene demo attiva</strong>
+            </div>
+
+            <div class="preset-row">
+              <select id="preset-model-select" aria-label="Scegli un modello preset">
+                <option value="demo">Scene demo</option>
+                <option value="/models/crystal-bloom.glb">Crystal Bloom</option>
+                <option value="/models/orb-garden.glb">Orb Garden</option>
+                <option value="/models/portal-stack.glb">Portal Stack</option>
+              </select>
+              <button id="load-preset-button" type="button">Apri preset</button>
+            </div>
+
+            <label class="file-picker" for="model-file">
+              Carica `.glb`
+            </label>
+            <input id="model-file" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
+
+            <form id="model-url-form" class="url-form">
+              <input
+                id="model-url"
+                type="url"
+                placeholder="https://.../model.glb"
+                autocomplete="off"
+              />
+              <button type="submit">Carica URL</button>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
+  </body>
+  </html>

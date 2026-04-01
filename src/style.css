@@ -240,18 +240,19 @@ h1 {
 }
 
 .stage {
-  position: relative;
+  display: grid;
+  grid-template-rows: minmax(56vh, 1fr) auto;
   min-height: 100vh;
 }
 
 .stage-tools {
-  position: absolute;
-  top: 1.4rem;
-  right: 1.4rem;
-  z-index: 3;
-  width: min(360px, calc(100vw - 2.8rem));
+  position: static;
+  width: 100%;
   display: grid;
   gap: 0.75rem;
+  padding: 1rem 1.4rem 1.4rem;
+  background: rgba(8, 15, 24, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 #scene-root,
@@ -345,9 +346,9 @@ h1 {
   }
 
   .stage-tools {
-    position: static;
     width: auto;
-    margin: 1rem 1rem 0;
+    margin: 0;
+    padding: 1rem;
   }
 }
 

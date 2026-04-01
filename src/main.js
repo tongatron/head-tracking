@@ -24,6 +24,7 @@ const landmarksOffButton = document.getElementById("landmarks-off");
 
 const overlayContext = webcamOverlay.getContext("2d");
 const gltfLoader = new GLTFLoader();
+const appBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
 
 let faceLandmarker;
 let videoStream;
@@ -144,6 +145,14 @@ function setModelStatus(message) {
   modelStatus.textContent = message;
 }
 
+function resolveModelSource(source) {
+  if (/^(https?:|blob:|data:)/i.test(source)) {
+    return source;
+  }
+
+  return new URL(source, appBaseUrl).href;
+}
+
 function clearLoadedModel() {
   if (!loadedModelRoot) {
     return;
@@ -201,7 +210,7 @@ function frameModel(root) {
 async function loadModel(source, label) {
   try {
     setModelStatus("Caricamento modello...");
-    const gltf = await gltfLoader.loadAsync(source);
+    const gltf = await gltfLoader.loadAsync(resolveModelSource(source));
 
     clearLoadedModel();
     setDemoObjectsVisible(false);

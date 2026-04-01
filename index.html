@@ -8,14 +8,16 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="hud">
-        <p class="eyebrow">Webcam + 3D</p>
-        <h1>Muovi la testa, cambia la vista.</h1>
-        <p class="intro">
-          Il prototipo usa la webcam del device per stimare posizione e distanza del volto.
-          Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti
-          o allontanandoti cambi lo zoom.
-        </p>
+      <header class="hero-header">
+        <div class="hero-copy">
+          <p class="eyebrow">Webcam + 3D</p>
+          <h1>3D Head Tracking</h1>
+          <p class="intro">
+            Il prototipo usa la webcam del device per stimare posizione e distanza del volto.
+            Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti
+            o allontanandoti cambi lo zoom.
+          </p>
+        </div>
 
         <button id="start-button" class="camera-cta" type="button">
           <span class="camera-cta-icon" aria-hidden="true">📷</span>
@@ -24,38 +26,35 @@
             <span class="camera-cta-state" id="camera-cta-state">Pronta al tracking</span>
           </span>
         </button>
-
-        <p class="notes">
-          Sposta il volto a destra o sinistra per ruotare la vista. Alzati o abbassati
-          per cambiare l'inclinazione della camera. Avvicinati alla webcam per entrare
-          nella scena, allontanati per uscirne. Per test veloci, preferisci file `.glb`:
-          sono piu semplici da caricare in locale.
-        </p>
-      </aside>
+      </header>
 
       <main class="stage">
         <div id="scene-root"></div>
 
         <div class="stage-preview">
-          <section class="preview-card">
-            <div>
-              <span class="status-label">Preview Tracking</span>
-              <strong>Webcam e landmark del volto</strong>
-            </div>
+          <details class="preview-card" open>
+            <summary class="preview-summary">
+              <div>
+                <span class="status-label">Preview Tracking</span>
+                <strong>Webcam e landmark del volto</strong>
+              </div>
+            </summary>
 
-            <div class="camera-panel">
-              <video id="webcam" autoplay muted playsinline></video>
-              <canvas id="webcam-overlay"></canvas>
-            </div>
+            <div class="preview-body">
+              <div class="camera-panel">
+                <video id="webcam" autoplay muted playsinline></video>
+                <canvas id="webcam-overlay"></canvas>
+              </div>
 
-            <div class="toggle-row">
-              <span class="toggle-label">Landmark visibili</span>
-              <div class="toggle-pill" id="landmark-toggle">
-                <button id="landmarks-on" class="toggle-option is-active" type="button">Si</button>
-                <button id="landmarks-off" class="toggle-option" type="button">No</button>
+              <div class="toggle-row">
+                <span class="toggle-label">Landmark visibili</span>
+                <div class="toggle-pill" id="landmark-toggle">
+                  <button id="landmarks-on" class="toggle-option is-active" type="button">Si</button>
+                  <button id="landmarks-off" class="toggle-option" type="button">No</button>
+                </div>
               </div>
             </div>
-          </section>
+          </details>
         </div>
 
         <div class="stage-tools">
@@ -90,9 +89,9 @@
             <div class="preset-row">
               <select id="preset-model-select" aria-label="Scegli un modello preset">
                 <option value="demo">Scene demo</option>
-                <option value="/models/crystal-bloom.glb">Crystal Bloom</option>
-                <option value="/models/orb-garden.glb">Orb Garden</option>
-                <option value="/models/portal-stack.glb">Portal Stack</option>
+                <option value="models/crystal-bloom.glb">Crystal Bloom</option>
+                <option value="models/orb-garden.glb">Orb Garden</option>
+                <option value="models/portal-stack.glb">Portal Stack</option>
               </select>
               <button id="load-preset-button" type="button">Apri preset</button>
             </div>

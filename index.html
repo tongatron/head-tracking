@@ -12,23 +12,31 @@
         <p class="eyebrow">Webcam + 3D</p>
         <h1>Muovi la testa, cambia la vista.</h1>
         <p class="intro">
-          Il prototipo usa la webcam del Mac per stimare posizione e distanza del volto.
+          Il prototipo usa la webcam del device per stimare posizione e distanza del volto.
           Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti
           o allontanandoti cambi lo zoom.
         </p>
 
-        <ul class="notes">
-          <li>Sposta il volto a destra o sinistra per ruotare la vista.</li>
-          <li>Alzati o abbassati per cambiare l'inclinazione della camera.</li>
-          <li>Avvicinati alla webcam per entrare nella scena, allontanati per uscirne.</li>
-          <li>Per test veloci, preferisci file `.glb`: sono più semplici da caricare in locale.</li>
-        </ul>
+        <button id="start-button" class="camera-cta" type="button">
+          <span class="camera-cta-icon" aria-hidden="true">📷</span>
+          <span class="camera-cta-copy">
+            <span class="camera-cta-label">Attiva fotocamera</span>
+            <span class="camera-cta-state" id="camera-cta-state">Pronta al tracking</span>
+          </span>
+        </button>
+
+        <p class="notes">
+          Sposta il volto a destra o sinistra per ruotare la vista. Alzati o abbassati
+          per cambiare l'inclinazione della camera. Avvicinati alla webcam per entrare
+          nella scena, allontanati per uscirne. Per test veloci, preferisci file `.glb`:
+          sono piu semplici da caricare in locale.
+        </p>
       </aside>
 
       <main class="stage">
         <div id="scene-root"></div>
 
-        <div class="stage-tools">
+        <div class="stage-preview">
           <section class="preview-card">
             <div>
               <span class="status-label">Preview Tracking</span>
@@ -48,13 +56,14 @@
               </div>
             </div>
           </section>
+        </div>
 
+        <div class="stage-tools">
           <div class="status-card">
             <div>
               <span class="status-label">Stato tracking</span>
               <strong id="tracking-status">In attesa della webcam...</strong>
             </div>
-            <button id="start-button" type="button">Avvia webcam</button>
           </div>
 
           <div class="metrics">

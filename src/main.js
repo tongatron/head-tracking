@@ -7,6 +7,7 @@ const sceneRoot = document.getElementById("scene-root");
 const webcam = document.getElementById("webcam");
 const webcamOverlay = document.getElementById("webcam-overlay");
 const startButton = document.getElementById("start-button");
+const cameraCtaState = document.getElementById("camera-cta-state");
 const trackingStatus = document.getElementById("tracking-status");
 const metricX = document.getElementById("metric-x");
 const metricY = document.getElementById("metric-y");
@@ -261,6 +262,11 @@ function setLandmarkVisibility(nextValue) {
   }
 }
 
+function setCameraButtonState(stateLabel, isActive = false) {
+  cameraCtaState.textContent = stateLabel;
+  startButton.classList.toggle("is-active", isActive);
+}
+
 function onPointerDown(event) {
   if (event.button !== 0) {
     return;
@@ -422,10 +428,12 @@ async function setupFaceLandmarker() {
 async function startWebcam() {
   startButton.disabled = true;
   trackingStatus.textContent = "Richiesta permesso webcam...";
+  setCameraButtonState("Richiesta permesso", false);
 
   try {
     if (!faceLandmarker) {
       trackingStatus.textContent = "Caricamento face tracking...";
+      setCameraButtonState("Caricamento tracker", false);
       await setupFaceLandmarker();
     }
 
@@ -442,12 +450,12 @@ async function startWebcam() {
 
     await webcam.play();
     trackingStatus.textContent = "Tracking attivo";
-    startButton.textContent = "Webcam attiva";
+    setCameraButtonState("Camera attiva", true);
   } catch (error) {
     console.error(error);
     trackingStatus.textContent = "Errore webcam o modello";
     startButton.disabled = false;
-    startButton.textContent = "Riprova";
+    setCameraButtonState("Errore, riprova", false);
   }
 }
 
@@ -545,6 +553,7 @@ modelUrlForm.addEventListener("submit", async (event) => {
 window.addEventListener("resize", onWindowResize);
 
 setLandmarkVisibility(true);
+setCameraButtonState("Pronta al tracking", false);
 animate(0);
 
 window.addEventListener("beforeunload", () => {

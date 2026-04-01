@@ -158,6 +158,133 @@ function buildPortalStack() {
   return root;
 }
 
+function buildSignalTotem() {
+  const root = new THREE.Group();
+  root.name = "SignalTotem";
+
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.4, 1.7, 0.45, 36),
+    createMaterial("#1c2333", "#0c1018", 0.25, 0.82),
+  );
+  base.position.y = -1.05;
+  root.add(base);
+
+  const spine = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 3.1, 0.4),
+    createMaterial("#d8e7ff", "#5f86ff", 0.52, 0.14),
+  );
+  spine.position.y = 0.3;
+  root.add(spine);
+
+  for (let index = 0; index < 4; index += 1) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.7 + index * 0.23, 0.05, 18, 100),
+      createMaterial(index % 2 === 0 ? "#6fd3ff" : "#78ffcb", "#2f74ff", 0.45, 0.18),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = -0.35 + index * 0.68;
+    ring.rotation.z = index * 0.3;
+    root.add(ring);
+  }
+
+  const beacon = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.38, 0),
+    createMaterial("#fff29a", "#ffb347", 0.35, 0.16),
+  );
+  beacon.name = "beacon";
+  beacon.position.y = 2.08;
+  root.add(beacon);
+  addFloatAnimation(root, beacon, "y", 0.15, 2.9);
+
+  return root;
+}
+
+function buildDataBloom() {
+  const root = new THREE.Group();
+  root.name = "DataBloom";
+
+  const core = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(0.62, 0),
+    createMaterial("#f0f6fc", "#7aa2ff", 0.48, 0.16),
+  );
+  core.name = "core";
+  root.add(core);
+
+  for (let index = 0; index < 12; index += 1) {
+    const angle = (index / 12) * Math.PI * 2;
+    const petal = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 1.15, 0.16),
+      createMaterial(index % 2 === 0 ? "#79c0ff" : "#ffa657", "#6e40c9", 0.3, 0.24),
+    );
+    petal.position.set(Math.cos(angle) * 0.95, 0, Math.sin(angle) * 0.95);
+    petal.lookAt(0, 0, 0);
+    petal.rotateX(Math.PI / 2);
+    root.add(petal);
+  }
+
+  const halo = new THREE.Mesh(
+    new THREE.TorusKnotGeometry(1.15, 0.08, 120, 12),
+    createMaterial("#8b5cf6", "#58a6ff", 0.38, 0.2),
+  );
+  halo.rotation.x = Math.PI / 5;
+  halo.rotation.y = Math.PI / 8;
+  root.add(halo);
+
+  addFloatAnimation(root, core, "y", 0.12, 3.4);
+  return root;
+}
+
+function buildMonoRover() {
+  const root = new THREE.Group();
+  root.name = "MonoRover";
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.1, 0.6, 1.2),
+    createMaterial("#e6edf3", "#6e7681", 0.4, 0.22),
+  );
+  body.position.y = -0.1;
+  root.add(body);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(0.95, 0.5, 0.9),
+    createMaterial("#79c0ff", "#1f6feb", 0.42, 0.18),
+  );
+  cabin.position.set(0.15, 0.48, 0);
+  root.add(cabin);
+
+  const antenna = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 1.2, 10),
+    createMaterial("#f0f6fc", "#ffa657", 0.2, 0.35),
+  );
+  antenna.position.set(0.35, 1.15, 0);
+  root.add(antenna);
+
+  const dish = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 24, 16, 0, Math.PI),
+    createMaterial("#ffa657", "#ff7b72", 0.25, 0.28),
+  );
+  dish.rotation.z = -Math.PI / 2;
+  dish.position.set(0.35, 1.58, 0);
+  root.add(dish);
+
+  const wheelMaterial = createMaterial("#1f2328", "#0d1117", 0.15, 0.88);
+  const wheelOffsets = [
+    [-0.78, -0.58, 0.64],
+    [0.78, -0.58, 0.64],
+    [-0.78, -0.58, -0.64],
+    [0.78, -0.58, -0.64],
+  ];
+
+  for (const [x, y, z] of wheelOffsets) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.16, 24), wheelMaterial);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, y, z);
+    root.add(wheel);
+  }
+
+  return root;
+}
+
 function exportBinary(scene) {
   return new Promise((resolve, reject) => {
     exporter.parse(
@@ -180,6 +307,9 @@ async function main() {
     ["crystal-bloom.glb", buildCrystalBloom()],
     ["orb-garden.glb", buildOrbGarden()],
     ["portal-stack.glb", buildPortalStack()],
+    ["signal-totem.glb", buildSignalTotem()],
+    ["data-bloom.glb", buildDataBloom()],
+    ["mono-rover.glb", buildMonoRover()],
   ];
 
   for (const [filename, scene] of models) {

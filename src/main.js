@@ -8,6 +8,7 @@ const webcam = document.getElementById("webcam");
 const webcamOverlay = document.getElementById("webcam-overlay");
 const startButton = document.getElementById("start-button");
 const cameraCtaState = document.getElementById("camera-cta-state");
+const cameraCtaLabel = document.querySelector(".camera-cta-label");
 const trackingStatus = document.getElementById("tracking-status");
 const metricX = document.getElementById("metric-x");
 const metricY = document.getElementById("metric-y");
@@ -274,6 +275,30 @@ function setLandmarkVisibility(nextValue) {
 function setCameraButtonState(stateLabel, isActive = false) {
   cameraCtaState.textContent = stateLabel;
   startButton.classList.toggle("is-active", isActive);
+  cameraCtaLabel.textContent = isActive ? "Disattiva fotocamera" : "Attiva fotocamera";
+}
+
+function isWebcamActive() {
+  return Boolean(videoStream && videoStream.getTracks().some((track) => track.readyState === "live"));
+}
+
+function stopWebcam() {
+  videoStream?.getTracks().forEach((track) => track.stop());
+  videoStream = null;
+  webcam.srcObject = null;
+  lastVideoTime = -1;
+  overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
+
+  targetHead.yaw = 0;
+  targetHead.pitch = 0;
+  targetHead.roll = 0;
+  targetHead.x = 0;
+  targetHead.y = 0;
+  targetHead.z = 0.5;
+
+  trackingStatus.textContent = "Webcam disattivata";
+  startButton.disabled = false;
+  setCameraButtonState("Pronta al tracking", false);
 }
 
 function onPointerDown(event) {
@@ -435,6 +460,11 @@ async function setupFaceLandmarker() {
 }
 
 async function startWebcam() {
+  if (isWebcamActive()) {
+    stopWebcam();
+    return;
+  }
+
   startButton.disabled = true;
   trackingStatus.textContent = "Richiesta permesso webcam...";
   setCameraButtonState("Richiesta permesso", false);
@@ -567,7 +597,7 @@ animate(0);
 
 window.addEventListener("beforeunload", () => {
   cancelAnimationFrame(animationFrameId);
-  videoStream?.getTracks().forEach((track) => track.stop());
+  stopWebcam();
   if (activeObjectUrl) {
     URL.revokeObjectURL(activeObjectUrl);
   }

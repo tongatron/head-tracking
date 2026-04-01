@@ -56,6 +56,36 @@ button {
   backdrop-filter: blur(16px);
 }
 
+.site-badge {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  border-radius: 9px;
+  background: rgba(33, 38, 45, 0.94);
+  color: #e6edf3;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(1, 4, 9, 0.22);
+}
+
+.site-badge:hover {
+  border-color: rgba(56, 139, 253, 0.28);
+  background: rgba(33, 38, 45, 0.92);
+}
+
+.site-badge-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: #ffffff;
+}
+
 .hero-copy {
   max-width: 960px;
   display: grid;

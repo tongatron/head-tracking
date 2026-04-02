@@ -553,14 +553,15 @@ h1 {
 }
 
 .toggle-option {
-  min-width: 42px;
-  min-height: 28px;
+  min-width: 72px;
+  min-height: 34px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: #8b949e;
   font-size: 0.8rem;
   font-weight: 600;
+  padding: 0.25rem 0.7rem;
   cursor: pointer;
   font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
 }

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Camera 3D Head Tracker</title>
+    <title>Tabu simulator</title>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-S4XSYK0QB7"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -45,7 +45,7 @@
             role="tab"
             aria-selected="false"
           >
-            Tabu shadow puppet
+            Tabu simulator
           </button>
           <button
             id="prototype-3d"
@@ -89,10 +89,12 @@
               </div>
 
               <div class="toggle-row">
-                <span class="toggle-label">Landmark visibili</span>
+                <span class="toggle-label">Preview tracking</span>
                 <div class="toggle-pill" id="landmark-toggle">
-                  <button id="landmarks-on" class="toggle-option is-active" type="button">Si</button>
-                  <button id="landmarks-off" class="toggle-option" type="button">No</button>
+                  <button id="landmarks-video" class="toggle-option is-active" type="button">
+                    Webcam + landmark
+                  </button>
+                  <button id="landmarks-only" class="toggle-option" type="button">Solo landmark</button>
                 </div>
               </div>
             </div>

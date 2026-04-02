@@ -23,8 +23,8 @@ const modelStatus = document.getElementById("model-status");
 const presetModelSelect = document.getElementById("preset-model-select");
 const loadPresetButton = document.getElementById("load-preset-button");
 const landmarkToggle = document.getElementById("landmark-toggle");
-const landmarksOnButton = document.getElementById("landmarks-on");
-const landmarksOffButton = document.getElementById("landmarks-off");
+const landmarksVideoButton = document.getElementById("landmarks-video");
+const landmarksOnlyButton = document.getElementById("landmarks-only");
 const prototypeShadowButton = document.getElementById("prototype-shadow");
 const prototype3dButton = document.getElementById("prototype-3d");
 const heroTitle = document.getElementById("hero-title");
@@ -37,7 +37,7 @@ const appBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
 
 const prototypeCopy = {
   shadow: {
-    title: "Tabu Shadow Puppet",
+    title: "Tabu simulator",
     intro:
       "Il prototipo trasforma webcam, volto e mani in una silhouette teatrale ispirata agli spot Tabu, mantenendo tracking live e logo sul palmo aperto.",
   },
@@ -65,6 +65,14 @@ const HAND_FINGER_CHAINS = [
   [0, 13, 14, 15, 16],
   [0, 17, 18, 19, 20],
 ];
+const POSE_PREVIEW_CHAINS = [
+  [11, 13, 15],
+  [12, 14, 16],
+  [11, 12],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+];
 const SHOULDER_LEFT_INDEX = 11;
 const SHOULDER_RIGHT_INDEX = 12;
 const ELBOW_LEFT_INDEX = 13;
@@ -76,7 +84,7 @@ const HIP_RIGHT_INDEX = 24;
 
 const state = {
   prototype: "scene3d",
-  showLandmarks: true,
+  previewMode: "video-landmarks",
   videoStream: null,
   animationFrameId: 0,
   lastVideoTime: -1,
@@ -87,6 +95,7 @@ const state = {
   holisticBusy: false,
   latestHolisticResults: null,
   segmentationCanvas: document.createElement("canvas"),
+  palmLogoCandidate: null,
   isDraggingView: false,
   activePointerId: null,
   lastPointerX: 0,
@@ -249,12 +258,18 @@ function updateMetrics() {
   metricZ.textContent = smoothedHead.z.toFixed(2);
 }
 
-function setLandmarkVisibility(nextValue) {
-  state.showLandmarks = nextValue;
-  landmarkToggle.dataset.state = nextValue ? "on" : "off";
-  landmarksOnButton.classList.toggle("is-active", nextValue);
-  landmarksOffButton.classList.toggle("is-active", !nextValue);
-  if (!nextValue) overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
+function updatePreviewModeUi() {
+  const isVideo = state.previewMode === "video-landmarks";
+  const isLandmarksOnly = state.previewMode === "landmarks-only";
+  landmarkToggle.dataset.state = state.previewMode;
+  landmarksVideoButton.classList.toggle("is-active", isVideo);
+  landmarksOnlyButton.classList.toggle("is-active", isLandmarksOnly);
+  webcam.style.opacity = isVideo ? "1" : "0";
+}
+
+function setPreviewMode(nextMode) {
+  state.previewMode = nextMode;
+  updatePreviewModeUi();
 }
 
 function setCameraButtonState(stateLabel, isActive = false) {
@@ -400,19 +415,83 @@ function updateCamera(time) {
   stageGroup.rotation.y = Math.sin(time * 0.00022) * 0.22;
 }
 
-function drawOverlay(landmarks) {
-  webcamOverlay.width = webcam.videoWidth;
-  webcamOverlay.height = webcam.videoHeight;
-  overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
-  if (!state.showLandmarks || !landmarks?.length) return;
-  overlayContext.fillStyle = "rgba(105, 210, 231, 0.95)";
-  for (const landmark of landmarks) {
+function drawHandOverlay(handLandmarks) {
+  if (!handLandmarks?.length) return;
+  overlayContext.strokeStyle = "rgba(255, 248, 210, 0.72)";
+  overlayContext.lineWidth = 2;
+  overlayContext.fillStyle = "rgba(255, 248, 210, 0.95)";
+
+  for (const chain of HAND_FINGER_CHAINS) {
+    overlayContext.beginPath();
+    chain.forEach((index, chainIndex) => {
+      const point = handLandmarks[index];
+      const x = point.x * webcamOverlay.width;
+      const y = point.y * webcamOverlay.height;
+      if (chainIndex === 0) overlayContext.moveTo(x, y);
+      else overlayContext.lineTo(x, y);
+    });
+    overlayContext.stroke();
+  }
+
+  for (const landmark of handLandmarks) {
     const x = landmark.x * webcamOverlay.width;
     const y = landmark.y * webcamOverlay.height;
     overlayContext.beginPath();
-    overlayContext.arc(x, y, 1.6, 0, Math.PI * 2);
+    overlayContext.arc(x, y, 3, 0, Math.PI * 2);
     overlayContext.fill();
   }
+}
+
+function drawPoseOverlay(poseLandmarks) {
+  if (!poseLandmarks?.length) return;
+  overlayContext.strokeStyle = "rgba(255, 104, 104, 0.48)";
+  overlayContext.lineWidth = 2;
+  overlayContext.fillStyle = "rgba(255, 104, 104, 0.8)";
+
+  for (const chain of POSE_PREVIEW_CHAINS) {
+    overlayContext.beginPath();
+    chain.forEach((index, chainIndex) => {
+      const point = poseLandmarks[index];
+      const x = point.x * webcamOverlay.width;
+      const y = point.y * webcamOverlay.height;
+      if (chainIndex === 0) overlayContext.moveTo(x, y);
+      else overlayContext.lineTo(x, y);
+    });
+    overlayContext.stroke();
+  }
+
+  for (const index of new Set(POSE_PREVIEW_CHAINS.flat())) {
+    const landmark = poseLandmarks[index];
+    const x = landmark.x * webcamOverlay.width;
+    const y = landmark.y * webcamOverlay.height;
+    overlayContext.beginPath();
+    overlayContext.arc(x, y, 3, 0, Math.PI * 2);
+    overlayContext.fill();
+  }
+}
+
+function drawOverlay(landmarks, extras = {}) {
+  webcamOverlay.width = webcam.videoWidth;
+  webcamOverlay.height = webcam.videoHeight;
+  overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
+  const hasFace = Boolean(landmarks?.length);
+  const hasHands = Boolean(extras.leftHandLandmarks?.length || extras.rightHandLandmarks?.length);
+  const hasPose = Boolean(extras.poseLandmarks?.length);
+  if (!hasFace && !hasHands && !hasPose) return;
+  overlayContext.fillStyle = "rgba(105, 210, 231, 0.95)";
+  if (hasFace) {
+    for (const landmark of landmarks) {
+      const x = landmark.x * webcamOverlay.width;
+      const y = landmark.y * webcamOverlay.height;
+      overlayContext.beginPath();
+      overlayContext.arc(x, y, 1.6, 0, Math.PI * 2);
+      overlayContext.fill();
+    }
+  }
+
+  drawHandOverlay(extras.leftHandLandmarks);
+  drawHandOverlay(extras.rightHandLandmarks);
+  drawPoseOverlay(extras.poseLandmarks);
 }
 
 async function setupFaceLandmarker() {
@@ -455,7 +534,11 @@ async function setupHolistic() {
   });
   holistic.onResults((results) => {
     state.latestHolisticResults = results;
-    drawOverlay(results.faceLandmarks);
+    drawOverlay(results.faceLandmarks, {
+      leftHandLandmarks: results.leftHandLandmarks,
+      rightHandLandmarks: results.rightHandLandmarks,
+      poseLandmarks: results.poseLandmarks,
+    });
     if (results.faceLandmarks?.length) {
       trackingStatus.textContent = results.leftHandLandmarks || results.rightHandLandmarks
         ? "Volto e mani rilevati"
@@ -555,43 +638,86 @@ function resizeShadowCanvas() {
 function drawHandShape(handLandmarks) {
   const points = handLandmarks.map(normalizedToCanvas);
   const fingerTips = [4, 8, 12, 16, 20].map((index) => points[index]);
-  const handOutline = [
-    points[0],
-    points[17],
-    fingerTips[4],
-    points[18],
-    fingerTips[3],
-    points[14],
-    fingerTips[2],
-    points[10],
-    fingerTips[1],
-    points[6],
-    fingerTips[0],
-    points[2],
-    points[1],
-  ];
+  const fingerBases = [2, 5, 9, 13, 17].map((index) => points[index]);
+  const palmCenter = getPalmCenter(points);
+  const palmWidth = Math.hypot(points[5].x - points[17].x, points[5].y - points[17].y);
+  const palmHeight = Math.hypot(points[0].x - points[9].x, points[0].y - points[9].y);
+  const palmRadiusX = Math.max(20, palmWidth * 0.38);
+  const palmRadiusY = Math.max(26, palmHeight * 0.48);
+  const gloveColor = "rgba(255, 252, 238, 0.99)";
 
-  shadowContext.shadowBlur = 22;
-  shadowContext.shadowColor = "rgba(255, 255, 220, 0.2)";
-  drawPath(handOutline, {
-    fillStyle: "rgba(255, 252, 238, 0.98)",
-    strokeStyle: "rgba(255, 252, 238, 0.98)",
-    lineWidth: 14,
-  });
-  shadowContext.shadowBlur = 0;
+  shadowContext.save();
+  shadowContext.fillStyle = gloveColor;
+  shadowContext.strokeStyle = gloveColor;
   shadowContext.lineCap = "round";
   shadowContext.lineJoin = "round";
-  shadowContext.strokeStyle = "rgba(255, 252, 238, 0.98)";
-  shadowContext.lineWidth = 26;
-  for (const chain of HAND_FINGER_CHAINS) {
-    const chainPoints = chain.map((index) => points[index]);
+  shadowContext.shadowBlur = 20;
+  shadowContext.shadowColor = "rgba(255, 255, 220, 0.18)";
+
+  shadowContext.beginPath();
+  shadowContext.ellipse(
+    palmCenter.x,
+    palmCenter.y + palmRadiusY * 0.08,
+    palmRadiusX,
+    palmRadiusY,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  shadowContext.fill();
+
+  shadowContext.beginPath();
+  shadowContext.ellipse(
+    (points[0].x + palmCenter.x) * 0.5,
+    (points[0].y + palmCenter.y) * 0.5 + palmRadiusY * 0.14,
+    palmRadiusX * 0.82,
+    palmRadiusY * 0.82,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  shadowContext.fill();
+
+  const fingerWidths = [18, 22, 21, 19, 17];
+  fingerBases.forEach((base, index) => {
+    const tip = fingerTips[index];
+    const length = Math.hypot(tip.x - base.x, tip.y - base.y);
+    const angle = Math.atan2(tip.y - base.y, tip.x - base.x);
+    const width = Math.max(12, Math.min(fingerWidths[index], length * 0.42));
+
+    shadowContext.save();
+    shadowContext.translate(base.x, base.y);
+    shadowContext.rotate(angle);
     shadowContext.beginPath();
-    shadowContext.moveTo(chainPoints[0].x, chainPoints[0].y);
-    for (let index = 1; index < chainPoints.length; index += 1) {
-      shadowContext.lineTo(chainPoints[index].x, chainPoints[index].y);
-    }
-    shadowContext.stroke();
-  }
+    shadowContext.roundRect(-width * 0.5, -width * 0.5, length + width * 0.25, width, width * 0.5);
+    shadowContext.fill();
+    shadowContext.restore();
+
+    shadowContext.beginPath();
+    shadowContext.arc(base.x, base.y, width * 0.52, 0, Math.PI * 2);
+    shadowContext.fill();
+    shadowContext.beginPath();
+    shadowContext.arc(tip.x, tip.y, width * 0.5, 0, Math.PI * 2);
+    shadowContext.fill();
+  });
+
+  const thumbBase = points[2];
+  const thumbTip = points[4];
+  const thumbLength = Math.hypot(thumbTip.x - thumbBase.x, thumbTip.y - thumbBase.y);
+  const thumbAngle = Math.atan2(thumbTip.y - thumbBase.y, thumbTip.x - thumbBase.x);
+  shadowContext.save();
+  shadowContext.translate(thumbBase.x, thumbBase.y);
+  shadowContext.rotate(thumbAngle);
+  shadowContext.beginPath();
+  shadowContext.roundRect(-10, -11, thumbLength + 12, 22, 11);
+  shadowContext.fill();
+  shadowContext.restore();
+
+  shadowContext.beginPath();
+  shadowContext.arc(points[0].x, points[0].y, Math.max(14, palmWidth * 0.16), 0, Math.PI * 2);
+  shadowContext.fill();
+  shadowContext.restore();
+
   return points;
 }
 
@@ -600,54 +726,19 @@ function drawBodySilhouette(results) {
   if (!pose) return;
   const leftShoulder = posePoint(pose, SHOULDER_LEFT_INDEX);
   const rightShoulder = posePoint(pose, SHOULDER_RIGHT_INDEX);
-  const leftElbow = posePoint(pose, ELBOW_LEFT_INDEX);
-  const rightElbow = posePoint(pose, ELBOW_RIGHT_INDEX);
-  const leftWrist = posePoint(pose, WRIST_LEFT_INDEX);
-  const rightWrist = posePoint(pose, WRIST_RIGHT_INDEX);
   const leftHip = posePoint(pose, HIP_LEFT_INDEX);
   const rightHip = posePoint(pose, HIP_RIGHT_INDEX);
   const torsoBottomY = Math.min(shadowCanvas.height - 12, Math.max(leftHip.y, rightHip.y) + shadowCanvas.height * 0.42);
   const torsoCenterX = (leftShoulder.x + rightShoulder.x) * 0.5;
-  const torsoWidth = Math.max(180, Math.abs(rightShoulder.x - leftShoulder.x) * 1.9);
+  const shirtHeight = Math.max(120, torsoBottomY - Math.max(leftShoulder.y, rightShoulder.y) - 16);
 
   drawPath(
     [
-      { x: leftShoulder.x - 22, y: leftShoulder.y + 8 },
-      { x: leftElbow.x - 28, y: leftElbow.y + 26 },
-      { x: leftWrist.x - 14, y: leftWrist.y + 34 },
-      { x: leftWrist.x + 32, y: leftWrist.y + 12 },
-      { x: leftElbow.x + 26, y: leftElbow.y - 12 },
-      { x: leftShoulder.x + 18, y: leftShoulder.y - 6 },
-    ],
-    { fillStyle: "#0f0716", strokeStyle: "#0f0716", lineWidth: 4 },
-  );
-  drawPath(
-    [
-      { x: rightShoulder.x + 22, y: rightShoulder.y + 8 },
-      { x: rightElbow.x + 28, y: rightElbow.y + 26 },
-      { x: rightWrist.x + 14, y: rightWrist.y + 34 },
-      { x: rightWrist.x - 32, y: rightWrist.y + 12 },
-      { x: rightElbow.x - 26, y: rightElbow.y - 12 },
-      { x: rightShoulder.x - 18, y: rightShoulder.y - 6 },
-    ],
-    { fillStyle: "#0f0716", strokeStyle: "#0f0716", lineWidth: 4 },
-  );
-  drawPath(
-    [
-      { x: leftShoulder.x - torsoWidth * 0.18, y: leftShoulder.y - 16 },
-      { x: rightShoulder.x + torsoWidth * 0.18, y: rightShoulder.y - 16 },
-      { x: torsoCenterX + torsoWidth * 0.36, y: torsoBottomY },
-      { x: torsoCenterX - torsoWidth * 0.36, y: torsoBottomY },
-    ],
-    { fillStyle: "#140a1c", strokeStyle: "#140a1c", lineWidth: 4 },
-  );
-  drawPath(
-    [
-      { x: torsoCenterX - 12, y: leftShoulder.y + 26 },
-      { x: torsoCenterX + 12, y: rightShoulder.y + 26 },
-      { x: torsoCenterX + 30, y: torsoBottomY - 26 },
-      { x: torsoCenterX, y: torsoBottomY + 12 },
-      { x: torsoCenterX - 30, y: torsoBottomY - 26 },
+      { x: torsoCenterX - 8, y: Math.max(leftShoulder.y, rightShoulder.y) + 28 },
+      { x: torsoCenterX + 8, y: Math.max(leftShoulder.y, rightShoulder.y) + 28 },
+      { x: torsoCenterX + 34, y: Math.max(leftShoulder.y, rightShoulder.y) + shirtHeight * 0.46 },
+      { x: torsoCenterX, y: Math.max(leftShoulder.y, rightShoulder.y) + shirtHeight },
+      { x: torsoCenterX - 34, y: Math.max(leftShoulder.y, rightShoulder.y) + shirtHeight * 0.46 },
     ],
     { fillStyle: "#fff8e8", strokeStyle: "#fff8e8", lineWidth: 2 },
   );
@@ -736,14 +827,23 @@ function isOpenPalm(handPoints) {
     fingertips.reduce((total, point) => total + Math.hypot(point.x - wrist.x, point.y - wrist.y), 0) /
     fingertips.length;
   const palmWidth = Math.hypot(handPoints[5].x - handPoints[17].x, handPoints[5].y - handPoints[17].y);
-  return averageTipDistance > palmWidth * 1.15;
+  return averageTipDistance > palmWidth * 1.22;
 }
 
-function drawPalmLogo(handPoints) {
-  const palmCenter = {
+function getPalmCenter(handPoints) {
+  return {
     x: (handPoints[0].x + handPoints[5].x + handPoints[9].x + handPoints[13].x + handPoints[17].x) / 5,
     y: (handPoints[0].y + handPoints[5].y + handPoints[9].y + handPoints[13].y + handPoints[17].y) / 5,
   };
+}
+
+function isPalmStable(previousCenter, nextCenter) {
+  if (!previousCenter || !nextCenter) return false;
+  return Math.hypot(previousCenter.x - nextCenter.x, previousCenter.y - nextCenter.y) < 22;
+}
+
+function drawPalmLogo(handPoints) {
+  const palmCenter = getPalmCenter(handPoints);
   const palmRadius =
     Math.max(
       Math.hypot(handPoints[5].x - handPoints[17].x, handPoints[5].y - handPoints[17].y),
@@ -869,29 +969,49 @@ function drawShadowPuppet(results) {
   shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
   drawSegmentationSilhouette(results);
   drawBodySilhouette(results);
-
-  const faceShape = pickPoints(results.faceLandmarks, FACE_OVAL_INDEXES);
-  shadowContext.shadowBlur = 18;
-  shadowContext.shadowColor = "rgba(130, 67, 255, 0.16)";
-  drawPath(faceShape, { fillStyle: "#080808", strokeStyle: "#080808", lineWidth: 2 });
-  shadowContext.shadowBlur = 0;
   drawFaceDetails(results.faceLandmarks);
 
   let rightScreenPalm = null;
+  const now = performance.now();
   for (const hand of [results.leftHandLandmarks, results.rightHandLandmarks]) {
     if (!hand) continue;
     const handPoints = drawHandShape(hand);
     if (isOpenPalm(handPoints)) {
-      const centerX =
-        (handPoints[0].x + handPoints[5].x + handPoints[9].x + handPoints[13].x + handPoints[17].x) / 5;
+      const palmCenter = getPalmCenter(handPoints);
+      const centerX = palmCenter.x;
       if (!rightScreenPalm || centerX > rightScreenPalm.centerX) {
-        rightScreenPalm = { handPoints, centerX };
+        rightScreenPalm = { handPoints, centerX, palmCenter };
       }
     }
   }
 
   if (rightScreenPalm && rightScreenPalm.centerX > shadowCanvas.width * 0.52) {
-    drawPalmLogo(rightScreenPalm.handPoints);
+    const samePalm =
+      state.palmLogoCandidate &&
+      isPalmStable(state.palmLogoCandidate.center, rightScreenPalm.palmCenter);
+
+    if (samePalm) {
+      state.palmLogoCandidate = {
+        center: rightScreenPalm.palmCenter,
+        handPoints: rightScreenPalm.handPoints,
+        openedAt: state.palmLogoCandidate.openedAt,
+      };
+    } else {
+      state.palmLogoCandidate = {
+        center: rightScreenPalm.palmCenter,
+        handPoints: rightScreenPalm.handPoints,
+        openedAt: now,
+      };
+    }
+  } else {
+    state.palmLogoCandidate = null;
+  }
+
+  if (
+    state.palmLogoCandidate &&
+    now - state.palmLogoCandidate.openedAt > 320
+  ) {
+    drawPalmLogo(state.palmLogoCandidate.handPoints);
   }
 }
 
@@ -1014,11 +1134,11 @@ loadPresetButton.addEventListener("click", async () => {
   await loadModel(selectedValue, presetModelSelect.selectedOptions[0]?.textContent || selectedValue);
 });
 
-landmarksOnButton.addEventListener("click", () => {
-  setLandmarkVisibility(true);
+landmarksVideoButton.addEventListener("click", () => {
+  setPreviewMode("video-landmarks");
 });
-landmarksOffButton.addEventListener("click", () => {
-  setLandmarkVisibility(false);
+landmarksOnlyButton.addEventListener("click", () => {
+  setPreviewMode("landmarks-only");
 });
 
 modelFileInput.addEventListener("change", async (event) => {
@@ -1040,7 +1160,7 @@ modelUrlForm.addEventListener("submit", async (event) => {
 
 window.addEventListener("resize", onWindowResize);
 
-setLandmarkVisibility(true);
+setPreviewMode("video-landmarks");
 setCameraButtonState("Pronta al tracking", false);
 updatePrototypeUi();
 resetToDemoScene();

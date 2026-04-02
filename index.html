@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tabu simulator</title>
+    <title>Tabù simulator</title>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-S4XSYK0QB7"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -27,6 +27,11 @@
           <span>tongatron.github.io</span>
         </a>
 
+        <button id="share-button" class="share-cta" type="button">
+          <span class="share-cta-icon" aria-hidden="true">↗</span>
+          <span class="share-cta-label">Condividi</span>
+        </button>
+
         <div class="hero-copy">
           <p class="eyebrow">Webcam + 3D</p>
           <h1 id="hero-title">3D Head Tracking</h1>
@@ -45,7 +50,7 @@
             role="tab"
             aria-selected="false"
           >
-            Tabu simulator
+            Tabù simulator
           </button>
           <button
             id="prototype-3d"
@@ -56,15 +61,43 @@
           >
             Ambienti 3D
           </button>
+          <button
+            id="prototype-mask"
+            class="prototype-option"
+            type="button"
+            role="tab"
+            aria-selected="false"
+          >
+            Palloncino
+          </button>
+          <button
+            id="prototype-layer"
+            class="prototype-option"
+            type="button"
+            role="tab"
+            aria-selected="false"
+          >
+            Layers
+          </button>
         </div>
 
-        <button id="start-button" class="camera-cta" type="button">
-          <span class="camera-cta-icon" aria-hidden="true">📷</span>
-          <span class="camera-cta-copy">
-            <span class="camera-cta-label">Attiva fotocamera</span>
-            <span class="camera-cta-state" id="camera-cta-state">Pronta al tracking</span>
-          </span>
-        </button>
+        <div class="hero-actions">
+          <button id="start-button" class="camera-cta" type="button">
+            <span class="camera-cta-icon" aria-hidden="true">📷</span>
+            <span class="camera-cta-copy">
+              <span class="camera-cta-label">Attiva fotocamera</span>
+              <span class="camera-cta-state" id="camera-cta-state">Pronta al tracking</span>
+            </span>
+          </button>
+
+          <button id="audio-toggle" class="audio-cta is-hidden" type="button">
+            <span class="audio-cta-icon" aria-hidden="true">♪</span>
+            <span class="audio-cta-copy">
+              <span class="audio-cta-label">Ascolta lo spot</span>
+              <span class="audio-cta-state" id="audio-cta-state">Play</span>
+            </span>
+          </button>
+        </div>
       </header>
 
       <main class="stage">
@@ -109,21 +142,6 @@
             </div>
           </div>
 
-          <div class="metrics">
-            <div class="metric">
-              <span>X</span>
-              <strong id="metric-x">0.00</strong>
-            </div>
-            <div class="metric">
-              <span>Y</span>
-              <strong id="metric-y">0.00</strong>
-            </div>
-            <div class="metric">
-              <span>Distanza</span>
-              <strong id="metric-z">0.00</strong>
-            </div>
-          </div>
-
           <section class="loader-card">
             <div>
               <span class="status-label">Modello 3D</span>
@@ -157,6 +175,26 @@
               />
               <button type="submit">Carica URL</button>
             </form>
+          </section>
+
+          <section id="layer-mix-card" class="layer-mix-card is-hidden">
+            <div class="layer-mix-head">
+              <div>
+                <span class="status-label">Layer mix</span>
+                <strong>Camera + landmark</strong>
+              </div>
+              <strong id="layer-mix-value" class="layer-mix-value">100%</strong>
+            </div>
+
+            <label class="layer-mix-label" for="layer-mix-range">
+              Regola la fusione tra camera e landmark, da 0% a 100%.
+            </label>
+            <input id="layer-mix-range" type="range" min="0" max="100" step="1" value="100" />
+
+            <div class="layer-mix-scale" aria-hidden="true">
+              <span>0% Camera</span>
+              <span>100% Landmark</span>
+            </div>
           </section>
         </div>
       </main>

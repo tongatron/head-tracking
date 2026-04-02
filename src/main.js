@@ -12,10 +12,9 @@ const webcamOverlay = document.getElementById("webcam-overlay");
 const startButton = document.getElementById("start-button");
 const cameraCtaState = document.getElementById("camera-cta-state");
 const cameraCtaLabel = document.querySelector(".camera-cta-label");
+const audioToggleButton = document.getElementById("audio-toggle");
+const audioCtaState = document.getElementById("audio-cta-state");
 const trackingStatus = document.getElementById("tracking-status");
-const metricX = document.getElementById("metric-x");
-const metricY = document.getElementById("metric-y");
-const metricZ = document.getElementById("metric-z");
 const modelFileInput = document.getElementById("model-file");
 const modelUrlForm = document.getElementById("model-url-form");
 const modelUrlInput = document.getElementById("model-url");
@@ -27,25 +26,50 @@ const landmarksVideoButton = document.getElementById("landmarks-video");
 const landmarksOnlyButton = document.getElementById("landmarks-only");
 const prototypeShadowButton = document.getElementById("prototype-shadow");
 const prototype3dButton = document.getElementById("prototype-3d");
+const prototypeMaskButton = document.getElementById("prototype-mask");
+const prototypeLayerButton = document.getElementById("prototype-layer");
+const shareButton = document.getElementById("share-button");
 const heroTitle = document.getElementById("hero-title");
 const heroIntro = document.getElementById("hero-intro");
+const layerMixCard = document.getElementById("layer-mix-card");
+const layerMixRange = document.getElementById("layer-mix-range");
+const layerMixValue = document.getElementById("layer-mix-value");
 const stage = document.querySelector(".stage");
 
 const overlayContext = webcamOverlay.getContext("2d");
 const gltfLoader = new GLTFLoader();
 const appBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
+const spotAudio = new Audio(`${import.meta.env.BASE_URL}audio/tabuspot.mp3`);
+spotAudio.preload = "auto";
 
 const prototypeCopy = {
   shadow: {
-    title: "Tabu simulator",
+    title: "Tabù simulator",
     intro:
-      "Il prototipo trasforma webcam, volto e mani in una silhouette teatrale ispirata agli spot Tabu, mantenendo tracking live e logo sul palmo aperto.",
+      "Il prototipo trasforma webcam, volto e mani in una silhouette teatrale ispirata agli spot Tabù, mantenendo tracking live e logo sul palmo aperto.",
   },
   scene3d: {
     title: "3D Head Tracking",
     intro:
       "Il prototipo usa la webcam del device per stimare posizione e distanza del volto. Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti o allontanandoti cambi lo zoom.",
   },
+  mask3d: {
+    title: "Palloncino",
+    intro:
+      "Una testa 3D morbida e minimale segue la testa in tempo reale con occhi e bocca reattivi, come un personaggio a palloncino.",
+  },
+  layer: {
+    title: "Layers",
+    intro:
+      "Una vista full-screen mostra tutti i landmark disponibili del tracking, inclusi volto, mani e pose. Il blend ti permette di miscelare camera e layer dal 0% al 100%.",
+  },
+};
+
+const prototypeQueryMap = {
+  shadow: "shadow",
+  scene3d: "scene3d",
+  mask3d: "mask3d",
+  layer: "layer",
 };
 
 const FACE_OVAL_INDEXES = [
@@ -94,8 +118,10 @@ const state = {
   holistic: null,
   holisticBusy: false,
   latestHolisticResults: null,
+  latestFaceLandmarks: null,
   segmentationCanvas: document.createElement("canvas"),
   palmLogoCandidate: null,
+  layerMix: 100,
   isDraggingView: false,
   activePointerId: null,
   lastPointerX: 0,
@@ -147,6 +173,294 @@ stageGroup.add(floor);
 const grid = new THREE.GridHelper(16, 24, "#4db5ff", "#1b3555");
 grid.position.y = -1.79;
 stageGroup.add(grid);
+
+const maskGroup = new THREE.Group();
+maskGroup.visible = false;
+scene.add(maskGroup);
+
+const maskHead = new THREE.Mesh(
+  new THREE.SphereGeometry(1.9, 48, 48),
+  new THREE.MeshStandardMaterial({
+    color: "#f5dcc8",
+    metalness: 0.08,
+    roughness: 0.82,
+  }),
+);
+maskHead.scale.set(0.95, 1.12, 0.9);
+maskGroup.add(maskHead);
+
+const maskNose = new THREE.Mesh(
+  new THREE.ConeGeometry(0.18, 0.55, 24),
+  new THREE.MeshStandardMaterial({ color: "#e8bea4", roughness: 0.9 }),
+);
+maskNose.rotation.x = Math.PI / 2;
+maskNose.position.set(0, -0.05, 1.28);
+maskGroup.add(maskNose);
+
+const maskEyeWhiteLeft = new THREE.Mesh(
+  new THREE.SphereGeometry(0.25, 24, 24),
+  new THREE.MeshStandardMaterial({ color: "#fffdf8", roughness: 0.6 }),
+);
+maskEyeWhiteLeft.scale.set(1.55, 0.7, 0.35);
+maskEyeWhiteLeft.position.set(-0.58, 0.35, 1.34);
+maskGroup.add(maskEyeWhiteLeft);
+
+const maskEyeWhiteRight = maskEyeWhiteLeft.clone();
+maskEyeWhiteRight.position.x = 0.58;
+maskGroup.add(maskEyeWhiteRight);
+
+const maskPupilLeft = new THREE.Mesh(
+  new THREE.SphereGeometry(0.1, 18, 18),
+  new THREE.MeshStandardMaterial({ color: "#111111", roughness: 0.35 }),
+);
+maskPupilLeft.position.set(-0.58, 0.35, 1.52);
+maskGroup.add(maskPupilLeft);
+
+const maskPupilRight = maskPupilLeft.clone();
+maskPupilRight.position.x = 0.58;
+maskGroup.add(maskPupilRight);
+
+const maskMouthOuter = new THREE.Mesh(
+  new THREE.TorusGeometry(0.46, 0.11, 18, 64),
+  new THREE.MeshStandardMaterial({ color: "#fff8f1", roughness: 0.45 }),
+);
+maskMouthOuter.rotation.x = Math.PI * 0.12;
+maskMouthOuter.position.set(0, -0.82, 1.3);
+maskGroup.add(maskMouthOuter);
+
+const maskMouthInner = new THREE.Mesh(
+  new THREE.SphereGeometry(0.24, 24, 24),
+  new THREE.MeshStandardMaterial({ color: "#40281d", roughness: 0.95 }),
+);
+maskMouthInner.scale.set(1.4, 0.62, 0.24);
+maskMouthInner.position.set(0, -0.84, 1.22);
+maskGroup.add(maskMouthInner);
+
+const maskCollarLeft = new THREE.Mesh(
+  new THREE.ConeGeometry(0.28, 0.85, 3),
+  new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.75 }),
+);
+maskCollarLeft.rotation.z = Math.PI * 0.74;
+maskCollarLeft.rotation.x = Math.PI;
+maskCollarLeft.position.set(-0.34, -2.08, 0.78);
+maskGroup.add(maskCollarLeft);
+
+const maskCollarRight = maskCollarLeft.clone();
+maskCollarRight.rotation.z = -Math.PI * 0.74;
+maskCollarRight.position.x = 0.34;
+maskGroup.add(maskCollarRight);
+
+const maskBowLeft = new THREE.Mesh(
+  new THREE.ConeGeometry(0.34, 0.7, 3),
+  new THREE.MeshStandardMaterial({ color: "#ff5531", roughness: 0.35, emissive: "#7a1508", emissiveIntensity: 0.28 }),
+);
+maskBowLeft.rotation.z = Math.PI * 0.6;
+maskBowLeft.rotation.x = Math.PI;
+maskBowLeft.position.set(-0.34, -1.82, 0.95);
+maskGroup.add(maskBowLeft);
+
+const maskBowRight = maskBowLeft.clone();
+maskBowRight.rotation.z = -Math.PI * 0.6;
+maskBowRight.position.x = 0.34;
+maskGroup.add(maskBowRight);
+
+const maskBowKnot = new THREE.Mesh(
+  new THREE.OctahedronGeometry(0.14, 0),
+  new THREE.MeshStandardMaterial({ color: "#fff3ef", roughness: 0.45 }),
+);
+maskBowKnot.position.set(0, -1.83, 1.02);
+maskGroup.add(maskBowKnot);
+
+const cartoonGroup = new THREE.Group();
+cartoonGroup.visible = false;
+scene.add(cartoonGroup);
+
+function addCutoutOutline(targetGroup, geometry, material, transform) {
+  const outline = new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({ color: "#121212", roughness: 1 }),
+  );
+  if (transform.position) outline.position.copy(transform.position);
+  if (transform.rotation) outline.rotation.set(transform.rotation.x, transform.rotation.y, transform.rotation.z);
+  if (transform.scale) outline.scale.copy(transform.scale.clone().multiplyScalar(1.08));
+  else outline.scale.setScalar(1.08);
+  outline.position.z -= 0.08;
+  targetGroup.add(outline);
+  const mesh = new THREE.Mesh(geometry, material);
+  if (transform.position) mesh.position.copy(transform.position);
+  if (transform.rotation) mesh.rotation.set(transform.rotation.x, transform.rotation.y, transform.rotation.z);
+  if (transform.scale) mesh.scale.copy(transform.scale);
+  targetGroup.add(mesh);
+  return mesh;
+}
+
+const cartoonTorso = addCutoutOutline(
+  cartoonGroup,
+  new THREE.CylinderGeometry(1.55, 1.85, 2.2, 32),
+  new THREE.MeshStandardMaterial({ color: "#8d4d1f", roughness: 0.96 }),
+  {
+    position: new THREE.Vector3(0, -1.82, 0),
+    scale: new THREE.Vector3(1, 1, 0.42),
+  },
+);
+
+const cartoonCoatLeft = addCutoutOutline(
+  cartoonGroup,
+  new THREE.BoxGeometry(1.5, 1.8, 0.24),
+  new THREE.MeshStandardMaterial({ color: "#5f2811", roughness: 0.92 }),
+  {
+    position: new THREE.Vector3(-0.78, -1.68, 0.14),
+    rotation: new THREE.Euler(0, 0, -0.08),
+  },
+);
+
+const cartoonCoatRight = addCutoutOutline(
+  cartoonGroup,
+  new THREE.BoxGeometry(1.5, 1.8, 0.24),
+  new THREE.MeshStandardMaterial({ color: "#5f2811", roughness: 0.92 }),
+  {
+    position: new THREE.Vector3(0.78, -1.68, 0.14),
+    rotation: new THREE.Euler(0, 0, 0.08),
+  },
+);
+
+const cartoonHead = addCutoutOutline(
+  cartoonGroup,
+  new THREE.SphereGeometry(1.34, 40, 40),
+  new THREE.MeshStandardMaterial({ color: "#f6c79d", roughness: 0.94 }),
+  {
+    position: new THREE.Vector3(0, 0.5, 0.3),
+    scale: new THREE.Vector3(1.06, 1.02, 0.66),
+  },
+);
+
+const cartoonHatTop = addCutoutOutline(
+  cartoonGroup,
+  new THREE.CylinderGeometry(1.18, 1.18, 0.46, 40),
+  new THREE.MeshStandardMaterial({ color: "#3f9b59", roughness: 0.9 }),
+  {
+    position: new THREE.Vector3(0, 1.62, 0.35),
+    scale: new THREE.Vector3(1, 1, 0.5),
+  },
+);
+
+const cartoonHatBand = addCutoutOutline(
+  cartoonGroup,
+  new THREE.CylinderGeometry(1.28, 1.28, 0.18, 40),
+  new THREE.MeshStandardMaterial({ color: "#f8d34f", roughness: 0.85 }),
+  {
+    position: new THREE.Vector3(0, 1.36, 0.38),
+    scale: new THREE.Vector3(1, 1, 0.56),
+  },
+);
+
+const cartoonPom = addCutoutOutline(
+  cartoonGroup,
+  new THREE.SphereGeometry(0.24, 18, 18),
+  new THREE.MeshStandardMaterial({ color: "#d9463d", roughness: 0.86 }),
+  {
+    position: new THREE.Vector3(0, 1.96, 0.48),
+  },
+);
+
+const cartoonEyeLeft = addCutoutOutline(
+  cartoonGroup,
+  new THREE.CircleGeometry(0.22, 28),
+  new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.8 }),
+  {
+    position: new THREE.Vector3(-0.42, 0.56, 1.06),
+  },
+);
+
+const cartoonEyeRight = addCutoutOutline(
+  cartoonGroup,
+  new THREE.CircleGeometry(0.22, 28),
+  new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.8 }),
+  {
+    position: new THREE.Vector3(0.42, 0.56, 1.06),
+  },
+);
+
+const cartoonPupilLeft = new THREE.Mesh(
+  new THREE.CircleGeometry(0.06, 20),
+  new THREE.MeshStandardMaterial({ color: "#111111", roughness: 0.5 }),
+);
+cartoonPupilLeft.position.set(-0.42, 0.56, 1.1);
+cartoonGroup.add(cartoonPupilLeft);
+
+const cartoonPupilRight = cartoonPupilLeft.clone();
+cartoonPupilRight.position.x = 0.42;
+cartoonGroup.add(cartoonPupilRight);
+
+const cartoonMouth = addCutoutOutline(
+  cartoonGroup,
+  new THREE.TorusGeometry(0.22, 0.035, 12, 32, Math.PI),
+  new THREE.MeshStandardMaterial({ color: "#47261d", roughness: 0.96 }),
+  {
+    position: new THREE.Vector3(0, -0.16, 1.02),
+    rotation: new THREE.Euler(0, 0, Math.PI),
+  },
+);
+
+const cartoonMouthInner = new THREE.Mesh(
+  new THREE.CircleGeometry(0.18, 24),
+  new THREE.MeshStandardMaterial({ color: "#6f2f24", roughness: 0.95 }),
+);
+cartoonMouthInner.scale.set(1, 0.3, 1);
+cartoonMouthInner.position.set(0, -0.12, 0.98);
+cartoonGroup.add(cartoonMouthInner);
+
+const cartoonNeck = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.24, 0.22, 0.44, 20),
+  new THREE.MeshStandardMaterial({ color: "#f2bf94", roughness: 0.92 }),
+);
+cartoonNeck.scale.z = 0.5;
+cartoonNeck.position.set(0, -0.72, 0.2);
+cartoonGroup.add(cartoonNeck);
+
+const cartoonHandLeft = new THREE.Group();
+cartoonGroup.add(cartoonHandLeft);
+const cartoonHandRight = new THREE.Group();
+cartoonGroup.add(cartoonHandRight);
+
+function buildCartoonHand(targetGroup) {
+  const palm = addCutoutOutline(
+    targetGroup,
+    new THREE.CircleGeometry(0.24, 24),
+    new THREE.MeshStandardMaterial({ color: "#f4d65f", roughness: 0.9 }),
+    { position: new THREE.Vector3(0, 0, 0.08), scale: new THREE.Vector3(1.1, 1.25, 1) },
+  );
+  const fingers = [];
+  for (let index = 0; index < 4; index += 1) {
+    const finger = addCutoutOutline(
+      targetGroup,
+      new THREE.CapsuleGeometry(0.065, 0.28, 4, 8),
+      new THREE.MeshStandardMaterial({ color: "#f4d65f", roughness: 0.9 }),
+      {
+        position: new THREE.Vector3(-0.18 + index * 0.12, 0.26, 0.1),
+        rotation: new THREE.Euler(0, 0, -0.06 + index * 0.04, "XYZ"),
+        scale: new THREE.Vector3(1, 1.05 - index * 0.06, 0.55),
+      },
+    );
+    fingers.push(finger);
+  }
+  const thumb = addCutoutOutline(
+    targetGroup,
+    new THREE.CapsuleGeometry(0.07, 0.22, 4, 8),
+    new THREE.MeshStandardMaterial({ color: "#f4d65f", roughness: 0.9 }),
+    {
+      position: new THREE.Vector3(-0.22, -0.02, 0.08),
+      rotation: new THREE.Euler(0, 0, 0.85),
+      scale: new THREE.Vector3(1, 1, 0.55),
+    },
+  );
+  return { palm, fingers, thumb };
+}
+
+const cartoonHandLeftParts = buildCartoonHand(cartoonHandLeft);
+const cartoonHandRightParts = buildCartoonHand(cartoonHandRight);
+cartoonHandLeft.scale.set(1.05, 1.05, 1);
+cartoonHandRight.scale.set(1.05, 1.05, 1);
 
 const objects = [];
 const palette = ["#69d2e7", "#f38630", "#e0e4cc", "#c8ff00", "#ff4e50"];
@@ -210,6 +524,27 @@ function resetToDemoScene() {
   setModelStatus("Scene demo attiva");
 }
 
+function updateSceneModeVisibility() {
+  const isScene3d = state.prototype === "scene3d";
+  const isMask3d = state.prototype === "mask3d";
+  floor.visible = isScene3d;
+  grid.visible = isScene3d;
+  objects.forEach((mesh) => {
+    mesh.visible = isScene3d && !state.loadedModelRoot;
+  });
+  if (state.loadedModelRoot) {
+    state.loadedModelRoot.visible = isScene3d;
+  }
+  maskGroup.visible = isMask3d;
+  if (isMask3d) {
+    scene.background = new THREE.Color("#070b12");
+    scene.fog = new THREE.Fog("#070b12", 10, 24);
+  } else {
+    scene.background = new THREE.Color("#08111f");
+    scene.fog = new THREE.Fog("#08111f", 14, 30);
+  }
+}
+
 function frameModel(root) {
   const boundingBox = new THREE.Box3().setFromObject(root);
   const size = boundingBox.getSize(new THREE.Vector3());
@@ -252,12 +587,6 @@ async function loadModel(source, label) {
   }
 }
 
-function updateMetrics() {
-  metricX.textContent = smoothedHead.yaw.toFixed(2);
-  metricY.textContent = smoothedHead.pitch.toFixed(2);
-  metricZ.textContent = smoothedHead.z.toFixed(2);
-}
-
 function updatePreviewModeUi() {
   const isVideo = state.previewMode === "video-landmarks";
   const isLandmarksOnly = state.previewMode === "landmarks-only";
@@ -272,10 +601,95 @@ function setPreviewMode(nextMode) {
   updatePreviewModeUi();
 }
 
+function updateLayerMixUi() {
+  const value = Math.round(state.layerMix);
+  layerMixRange.value = String(value);
+  layerMixValue.textContent = `${value}%`;
+}
+
+function updatePrototypeUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("prototype", prototypeQueryMap[state.prototype] || "scene3d");
+  window.history.replaceState({}, "", url);
+}
+
+function getInitialPrototypeFromUrl() {
+  const url = new URL(window.location.href);
+  const prototype = url.searchParams.get("prototype");
+  if (prototype === "shadow") return "shadow";
+  if (prototype === "scene3d") return "scene3d";
+  if (prototype === "mask3d") return "mask3d";
+  if (prototype === "layer") return "layer";
+  return null;
+}
+
+function getPrototypeShareUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("prototype", prototypeQueryMap[state.prototype] || "scene3d");
+  return url.toString();
+}
+
+function updateShareUi(label = "Condividi") {
+  shareButton.querySelector(".share-cta-label").textContent = label;
+}
+
+async function shareCurrentPrototype() {
+  const url = getPrototypeShareUrl();
+  const title = `${prototypeCopy[state.prototype].title} · head-tracking`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title,
+        text: prototypeCopy[state.prototype].intro,
+        url,
+      });
+      updateShareUi("Condiviso");
+    } else if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      updateShareUi("Link copiato");
+    } else {
+      window.prompt("Copia questo link", url);
+      updateShareUi("Link pronto");
+    }
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      console.error(error);
+      updateShareUi("Errore");
+    }
+    return;
+  }
+
+  window.setTimeout(() => {
+    updateShareUi("Condividi");
+  }, 1800);
+}
+
 function setCameraButtonState(stateLabel, isActive = false) {
   cameraCtaState.textContent = stateLabel;
   startButton.classList.toggle("is-active", isActive);
   cameraCtaLabel.textContent = isActive ? "Disattiva fotocamera" : "Attiva fotocamera";
+}
+
+function updateAudioUi() {
+  const isShadow = state.prototype === "shadow";
+  const isPlaying = !spotAudio.paused;
+  audioToggleButton.classList.toggle("is-hidden", !isShadow);
+  audioToggleButton.classList.toggle("is-playing", isPlaying);
+  audioCtaState.textContent = isPlaying ? "Pausa" : "Play";
+}
+
+async function toggleSpotAudio() {
+  try {
+    if (spotAudio.paused) {
+      await spotAudio.play();
+    } else {
+      spotAudio.pause();
+    }
+  } catch (error) {
+    console.error(error);
+  }
+  updateAudioUi();
 }
 
 function isWebcamActive() {
@@ -301,6 +715,7 @@ function stopWebcam() {
   webcam.srcObject = null;
   state.lastVideoTime = -1;
   state.latestHolisticResults = null;
+  state.latestFaceLandmarks = null;
   overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
   clearShadowCanvas();
   resetTrackingTargets();
@@ -395,7 +810,6 @@ function smoothTracking() {
   smoothedHead.x = THREE.MathUtils.lerp(smoothedHead.x, targetHead.x, 0.12);
   smoothedHead.y = THREE.MathUtils.lerp(smoothedHead.y, targetHead.y, 0.12);
   smoothedHead.z = THREE.MathUtils.lerp(smoothedHead.z, targetHead.z, 0.09);
-  updateMetrics();
 }
 
 function updateCamera(time) {
@@ -415,83 +829,133 @@ function updateCamera(time) {
   stageGroup.rotation.y = Math.sin(time * 0.00022) * 0.22;
 }
 
-function drawHandOverlay(handLandmarks) {
+function updateMaskScene() {
+  const yaw = smoothedHead.yaw * 0.9;
+  const pitch = smoothedHead.pitch * 0.8;
+  const roll = smoothedHead.roll * 0.65;
+  const distance = THREE.MathUtils.mapLinear(smoothedHead.z, 0.12, 0.52, 0.95, 1.48);
+
+  camera.position.set(0, 0.05, 6.6);
+  camera.lookAt(0, 0, 0);
+  camera.rotation.z = 0;
+
+  maskGroup.position.set(smoothedHead.x * 1.1, -smoothedHead.y * 0.9, 0);
+  maskGroup.rotation.set(pitch, yaw, -roll);
+  maskGroup.scale.setScalar(distance);
+
+  const landmarks = state.latestFaceLandmarks;
+  if (!landmarks?.length) return;
+
+  const mouthOpen = Math.abs((landmarks[14]?.y ?? 0.5) - (landmarks[13]?.y ?? 0.5));
+  const leftEyeOpen = Math.abs((landmarks[145]?.y ?? 0.4) - (landmarks[159]?.y ?? 0.4));
+  const rightEyeOpen = Math.abs((landmarks[374]?.y ?? 0.4) - (landmarks[386]?.y ?? 0.4));
+  const mouthStretch = THREE.MathUtils.clamp(1 + mouthOpen * 8.5, 1, 1.65);
+  const mouthHeight = THREE.MathUtils.clamp(0.55 + mouthOpen * 14, 0.55, 1.28);
+  const eyeLeftHeight = THREE.MathUtils.clamp(0.28 + leftEyeOpen * 10, 0.18, 0.72);
+  const eyeRightHeight = THREE.MathUtils.clamp(0.28 + rightEyeOpen * 10, 0.18, 0.72);
+  const pupilOffsetX = THREE.MathUtils.clamp((smoothedHead.yaw + smoothedHead.x * 0.35) * 0.08, -0.08, 0.08);
+  const pupilOffsetY = THREE.MathUtils.clamp((-smoothedHead.pitch - smoothedHead.y * 0.2) * 0.06, -0.05, 0.05);
+
+  maskMouthOuter.scale.set(mouthStretch, mouthHeight, 1);
+  maskMouthInner.scale.set(mouthStretch * 1.2, THREE.MathUtils.clamp(0.4 + mouthOpen * 18, 0.4, 1.55), 0.24);
+  maskEyeWhiteLeft.scale.y = eyeLeftHeight;
+  maskEyeWhiteRight.scale.y = eyeRightHeight;
+  maskPupilLeft.position.set(-0.58 + pupilOffsetX, 0.35 + pupilOffsetY, 1.52);
+  maskPupilRight.position.set(0.58 + pupilOffsetX, 0.35 + pupilOffsetY, 1.52);
+  maskBowLeft.rotation.y = Math.sin(performance.now() * 0.004) * 0.08;
+  maskBowRight.rotation.y = -Math.sin(performance.now() * 0.004) * 0.08;
+}
+
+function drawHandOverlay(context, width, height, handLandmarks, alpha = 1) {
   if (!handLandmarks?.length) return;
-  overlayContext.strokeStyle = "rgba(255, 248, 210, 0.72)";
-  overlayContext.lineWidth = 2;
-  overlayContext.fillStyle = "rgba(255, 248, 210, 0.95)";
+  context.save();
+  context.globalAlpha = alpha;
+  context.strokeStyle = "rgba(255, 248, 210, 0.72)";
+  context.lineWidth = 2;
+  context.fillStyle = "rgba(255, 248, 210, 0.95)";
 
   for (const chain of HAND_FINGER_CHAINS) {
-    overlayContext.beginPath();
+    context.beginPath();
     chain.forEach((index, chainIndex) => {
       const point = handLandmarks[index];
-      const x = point.x * webcamOverlay.width;
-      const y = point.y * webcamOverlay.height;
-      if (chainIndex === 0) overlayContext.moveTo(x, y);
-      else overlayContext.lineTo(x, y);
+      const x = point.x * width;
+      const y = point.y * height;
+      if (chainIndex === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
     });
-    overlayContext.stroke();
+    context.stroke();
   }
 
   for (const landmark of handLandmarks) {
-    const x = landmark.x * webcamOverlay.width;
-    const y = landmark.y * webcamOverlay.height;
-    overlayContext.beginPath();
-    overlayContext.arc(x, y, 3, 0, Math.PI * 2);
-    overlayContext.fill();
+    const x = landmark.x * width;
+    const y = landmark.y * height;
+    context.beginPath();
+    context.arc(x, y, 3, 0, Math.PI * 2);
+    context.fill();
   }
+  context.restore();
 }
 
-function drawPoseOverlay(poseLandmarks) {
+function drawPoseOverlay(context, width, height, poseLandmarks, alpha = 1) {
   if (!poseLandmarks?.length) return;
-  overlayContext.strokeStyle = "rgba(255, 104, 104, 0.48)";
-  overlayContext.lineWidth = 2;
-  overlayContext.fillStyle = "rgba(255, 104, 104, 0.8)";
+  context.save();
+  context.globalAlpha = alpha;
+  context.strokeStyle = "rgba(255, 104, 104, 0.48)";
+  context.lineWidth = 2;
+  context.fillStyle = "rgba(255, 104, 104, 0.8)";
 
   for (const chain of POSE_PREVIEW_CHAINS) {
-    overlayContext.beginPath();
+    context.beginPath();
     chain.forEach((index, chainIndex) => {
       const point = poseLandmarks[index];
-      const x = point.x * webcamOverlay.width;
-      const y = point.y * webcamOverlay.height;
-      if (chainIndex === 0) overlayContext.moveTo(x, y);
-      else overlayContext.lineTo(x, y);
+      const x = point.x * width;
+      const y = point.y * height;
+      if (chainIndex === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
     });
-    overlayContext.stroke();
+    context.stroke();
   }
 
   for (const index of new Set(POSE_PREVIEW_CHAINS.flat())) {
     const landmark = poseLandmarks[index];
-    const x = landmark.x * webcamOverlay.width;
-    const y = landmark.y * webcamOverlay.height;
-    overlayContext.beginPath();
-    overlayContext.arc(x, y, 3, 0, Math.PI * 2);
-    overlayContext.fill();
+    const x = landmark.x * width;
+    const y = landmark.y * height;
+    context.beginPath();
+    context.arc(x, y, 3, 0, Math.PI * 2);
+    context.fill();
   }
+  context.restore();
+}
+
+function drawLandmarksToContext(context, width, height, landmarks, extras = {}, alpha = 1) {
+  const hasFace = Boolean(landmarks?.length);
+  const hasHands = Boolean(extras.leftHandLandmarks?.length || extras.rightHandLandmarks?.length);
+  const hasPose = Boolean(extras.poseLandmarks?.length);
+  if (!hasFace && !hasHands && !hasPose) return;
+  context.save();
+  context.globalAlpha = alpha;
+  context.fillStyle = "rgba(105, 210, 231, 0.95)";
+  if (hasFace) {
+    for (const landmark of landmarks) {
+      const x = landmark.x * width;
+      const y = landmark.y * height;
+      context.beginPath();
+      context.arc(x, y, 1.6, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+  context.restore();
+
+  drawHandOverlay(context, width, height, extras.leftHandLandmarks, alpha);
+  drawHandOverlay(context, width, height, extras.rightHandLandmarks, alpha);
+  drawPoseOverlay(context, width, height, extras.poseLandmarks, alpha);
 }
 
 function drawOverlay(landmarks, extras = {}) {
   webcamOverlay.width = webcam.videoWidth;
   webcamOverlay.height = webcam.videoHeight;
   overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
-  const hasFace = Boolean(landmarks?.length);
-  const hasHands = Boolean(extras.leftHandLandmarks?.length || extras.rightHandLandmarks?.length);
-  const hasPose = Boolean(extras.poseLandmarks?.length);
-  if (!hasFace && !hasHands && !hasPose) return;
-  overlayContext.fillStyle = "rgba(105, 210, 231, 0.95)";
-  if (hasFace) {
-    for (const landmark of landmarks) {
-      const x = landmark.x * webcamOverlay.width;
-      const y = landmark.y * webcamOverlay.height;
-      overlayContext.beginPath();
-      overlayContext.arc(x, y, 1.6, 0, Math.PI * 2);
-      overlayContext.fill();
-    }
-  }
-
-  drawHandOverlay(extras.leftHandLandmarks);
-  drawHandOverlay(extras.rightHandLandmarks);
-  drawPoseOverlay(extras.poseLandmarks);
+  drawLandmarksToContext(overlayContext, webcamOverlay.width, webcamOverlay.height, landmarks, extras, 1);
 }
 
 async function setupFaceLandmarker() {
@@ -534,6 +998,7 @@ async function setupHolistic() {
   });
   holistic.onResults((results) => {
     state.latestHolisticResults = results;
+    state.latestFaceLandmarks = results.faceLandmarks || null;
     drawOverlay(results.faceLandmarks, {
       leftHandLandmarks: results.leftHandLandmarks,
       rightHandLandmarks: results.rightHandLandmarks,
@@ -552,11 +1017,11 @@ async function setupHolistic() {
 }
 
 async function ensureTrackerForActivePrototype() {
-  if (state.prototype === "scene3d") {
+  if (state.prototype === "scene3d" || state.prototype === "mask3d") {
     trackingStatus.textContent = "Caricamento face tracking...";
     await setupFaceLandmarker();
   } else {
-    trackingStatus.textContent = "Caricamento shadow puppet...";
+    trackingStatus.textContent = state.prototype === "layer" ? "Caricamento layer tracking..." : "Caricamento shadow puppet...";
     await setupHolistic();
   }
 }
@@ -583,7 +1048,15 @@ async function startWebcam() {
     });
     webcam.srcObject = state.videoStream;
     await webcam.play();
-    trackingStatus.textContent = state.prototype === "scene3d" ? "Tracking attivo" : "Shadow puppet attivo";
+    trackingStatus.textContent =
+      state.prototype === "shadow"
+        ? "Shadow puppet attivo"
+        : state.prototype === "layer"
+          ? "Layer tracking attivo"
+        : state.prototype === "mask3d"
+          ? "Palloncino attivo"
+          : "Tracking attivo";
+    startButton.disabled = false;
     setCameraButtonState("Camera attiva", true);
   } catch (error) {
     console.error(error);
@@ -1015,15 +1488,54 @@ function drawShadowPuppet(results) {
   }
 }
 
+function drawMirroredVideoToShadowCanvas(alpha) {
+  if (webcam.readyState < 2 || alpha <= 0) return;
+  shadowContext.save();
+  shadowContext.globalAlpha = alpha;
+  shadowContext.translate(shadowCanvas.width, 0);
+  shadowContext.scale(-1, 1);
+  shadowContext.drawImage(webcam, 0, 0, shadowCanvas.width, shadowCanvas.height);
+  shadowContext.restore();
+}
+
+function drawLayerView(results) {
+  resizeShadowCanvas();
+  shadowContext.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  shadowContext.fillStyle = "#000";
+  shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+
+  const landmarkAlpha = THREE.MathUtils.clamp(state.layerMix / 100, 0, 1);
+  const cameraAlpha = THREE.MathUtils.clamp(1 - landmarkAlpha, 0, 1);
+  drawMirroredVideoToShadowCanvas(cameraAlpha);
+
+  drawLandmarksToContext(
+    shadowContext,
+    shadowCanvas.width,
+    shadowCanvas.height,
+    results?.faceLandmarks || null,
+    {
+      leftHandLandmarks: results?.leftHandLandmarks,
+      rightHandLandmarks: results?.rightHandLandmarks,
+      poseLandmarks: results?.poseLandmarks,
+    },
+    landmarkAlpha,
+  );
+}
+
 async function trackScene3d() {
   if (!state.faceLandmarker || webcam.readyState < 2) return;
   if (webcam.currentTime === state.lastVideoTime) return;
   state.lastVideoTime = webcam.currentTime;
   const result = state.faceLandmarker.detectForVideo(webcam, performance.now());
   const landmarks = result.faceLandmarks[0];
+  state.latestFaceLandmarks = landmarks || null;
   drawOverlay(landmarks);
   updateHeadTarget(landmarks);
-  trackingStatus.textContent = landmarks ? "Posa testa agganciata" : "Volto non trovato";
+  trackingStatus.textContent = landmarks
+    ? state.prototype === "mask3d"
+      ? "Palloncino agganciato"
+      : "Posa testa agganciata"
+    : "Volto non trovato";
 }
 
 function trackShadowPrototype() {
@@ -1048,12 +1560,29 @@ function updatePrototypeUi() {
   heroIntro.textContent = copy.intro;
   prototypeShadowButton.classList.toggle("is-active", state.prototype === "shadow");
   prototype3dButton.classList.toggle("is-active", state.prototype === "scene3d");
+  prototypeMaskButton.classList.toggle("is-active", state.prototype === "mask3d");
+  prototypeLayerButton.classList.toggle("is-active", state.prototype === "layer");
   prototypeShadowButton.setAttribute("aria-selected", String(state.prototype === "shadow"));
   prototype3dButton.setAttribute("aria-selected", String(state.prototype === "scene3d"));
+  prototypeMaskButton.setAttribute("aria-selected", String(state.prototype === "mask3d"));
+  prototypeLayerButton.setAttribute("aria-selected", String(state.prototype === "layer"));
   const isShadow = state.prototype === "shadow";
+  const isLayer = state.prototype === "layer";
+  const isMask = state.prototype === "mask3d";
   stage.classList.toggle("stage--shadow", isShadow);
-  shadowStage.classList.toggle("is-hidden", !isShadow);
-  sceneRoot.classList.toggle("is-hidden", isShadow);
+  stage.classList.toggle("stage--layer", isLayer);
+  stage.classList.toggle("stage--mask", isMask);
+  document.querySelector(".stage-preview")?.classList.toggle("is-hidden", isLayer);
+  shadowStage.classList.toggle("is-hidden", !isShadow && !isLayer);
+  sceneRoot.classList.toggle("is-hidden", isShadow || isLayer);
+  layerMixCard.classList.toggle("is-hidden", !isLayer);
+  if (!isShadow && !spotAudio.paused) {
+    spotAudio.pause();
+    spotAudio.currentTime = 0;
+  }
+  updateAudioUi();
+  updateSceneModeVisibility();
+  updatePrototypeUrl();
   clearShadowCanvas();
   overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
   state.lastVideoTime = -1;
@@ -1067,7 +1596,14 @@ async function setPrototype(nextPrototype) {
     startButton.disabled = true;
     try {
       await ensureTrackerForActivePrototype();
-      trackingStatus.textContent = nextPrototype === "scene3d" ? "Tracking attivo" : "Shadow puppet attivo";
+      trackingStatus.textContent =
+        nextPrototype === "shadow"
+          ? "Shadow puppet attivo"
+          : nextPrototype === "layer"
+            ? "Layer tracking attivo"
+          : nextPrototype === "mask3d"
+            ? "Palloncino attivo"
+            : "Tracking attivo";
     } catch (error) {
       console.error(error);
       trackingStatus.textContent = "Errore cambio prototipo";
@@ -1075,7 +1611,14 @@ async function setPrototype(nextPrototype) {
       startButton.disabled = false;
     }
   } else {
-    trackingStatus.textContent = nextPrototype === "scene3d" ? "In attesa della webcam..." : "Attiva la webcam per Tabu";
+    trackingStatus.textContent =
+      nextPrototype === "shadow"
+        ? "Attiva la webcam per Tabù"
+        : nextPrototype === "layer"
+          ? "Attiva la webcam per Layers"
+        : nextPrototype === "mask3d"
+          ? "Attiva la webcam per Palloncino"
+          : "In attesa della webcam...";
   }
 }
 
@@ -1083,7 +1626,7 @@ function animate(time) {
   state.animationFrameId = requestAnimationFrame(animate);
 
   if (isWebcamActive()) {
-    if (state.prototype === "scene3d") trackScene3d();
+    if (state.prototype === "scene3d" || state.prototype === "mask3d") trackScene3d();
     else trackShadowPrototype();
   }
 
@@ -1096,6 +1639,12 @@ function animate(time) {
     });
     if (state.loadedModelRoot) state.loadedModelRoot.rotation.y += 0.0035;
     renderer.render(scene, camera);
+  } else if (state.prototype === "mask3d") {
+    smoothTracking();
+    updateMaskScene();
+    renderer.render(scene, camera);
+  } else if (state.prototype === "layer" && state.latestHolisticResults) {
+    drawLayerView(state.latestHolisticResults);
   } else if (state.latestHolisticResults) {
     drawShadowPuppet(state.latestHolisticResults);
   } else {
@@ -1124,6 +1673,14 @@ prototypeShadowButton.addEventListener("click", () => {
 prototype3dButton.addEventListener("click", () => {
   setPrototype("scene3d");
 });
+prototypeMaskButton.addEventListener("click", () => {
+  setPrototype("mask3d");
+});
+prototypeLayerButton.addEventListener("click", () => {
+  setPrototype("layer");
+});
+audioToggleButton.addEventListener("click", toggleSpotAudio);
+shareButton.addEventListener("click", shareCurrentPrototype);
 
 loadPresetButton.addEventListener("click", async () => {
   const selectedValue = presetModelSelect.value;
@@ -1139,6 +1696,10 @@ landmarksVideoButton.addEventListener("click", () => {
 });
 landmarksOnlyButton.addEventListener("click", () => {
   setPreviewMode("landmarks-only");
+});
+layerMixRange.addEventListener("input", (event) => {
+  state.layerMix = Number(event.target.value);
+  updateLayerMixUi();
 });
 
 modelFileInput.addEventListener("change", async (event) => {
@@ -1160,14 +1721,22 @@ modelUrlForm.addEventListener("submit", async (event) => {
 
 window.addEventListener("resize", onWindowResize);
 
+const initialPrototype = getInitialPrototypeFromUrl();
+if (initialPrototype) {
+  state.prototype = initialPrototype;
+}
+
 setPreviewMode("video-landmarks");
 setCameraButtonState("Pronta al tracking", false);
+updateLayerMixUi();
 updatePrototypeUi();
 resetToDemoScene();
+updateSceneModeVisibility();
 animate(0);
 
 window.addEventListener("beforeunload", () => {
   cancelAnimationFrame(state.animationFrameId);
   stopWebcam();
+  spotAudio.pause();
   if (state.activeObjectUrl) URL.revokeObjectURL(state.activeObjectUrl);
 });

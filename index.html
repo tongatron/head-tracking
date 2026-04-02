@@ -11,6 +11,8 @@
       gtag('js', new Date());
       gtag('config', 'G-S4XSYK0QB7');
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script type="module" src="/src/main.js"></script>
   </head>
   <body>
@@ -27,12 +29,33 @@
 
         <div class="hero-copy">
           <p class="eyebrow">Webcam + 3D</p>
-          <h1>3D Head Tracking</h1>
-          <p class="intro">
+          <h1 id="hero-title">3D Head Tracking</h1>
+          <p class="intro" id="hero-intro">
             Il prototipo usa la webcam del device per stimare posizione e distanza del volto.
             Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti
             o allontanandoti cambi lo zoom.
           </p>
+        </div>
+
+        <div class="prototype-switch" role="tablist" aria-label="Scegli un prototipo">
+          <button
+            id="prototype-shadow"
+            class="prototype-option"
+            type="button"
+            role="tab"
+            aria-selected="false"
+          >
+            Tabu shadow puppet
+          </button>
+          <button
+            id="prototype-3d"
+            class="prototype-option is-active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+          >
+            Ambienti 3D
+          </button>
         </div>
 
         <button id="start-button" class="camera-cta" type="button">
@@ -46,6 +69,9 @@
 
       <main class="stage">
         <div id="scene-root"></div>
+        <section id="shadow-stage" class="shadow-stage is-hidden" aria-label="Tabu shadow puppet">
+          <canvas id="shadow-canvas"></canvas>
+        </section>
 
         <div class="stage-preview">
           <details class="preview-card" open>

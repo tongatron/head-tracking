@@ -125,6 +125,43 @@ h1 {
   margin: 0;
 }
 
+.prototype-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  border-radius: 999px;
+  background: rgba(22, 27, 34, 0.88);
+  box-shadow: 0 12px 30px rgba(1, 4, 9, 0.2);
+}
+
+.prototype-option {
+  min-height: 38px;
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #8b949e;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.prototype-option:hover {
+  color: #f0f6fc;
+}
+
+.prototype-option.is-active {
+  background: linear-gradient(180deg, rgba(56, 139, 253, 0.32), rgba(56, 139, 253, 0.18));
+  color: #f0f6fc;
+  box-shadow: inset 0 0 0 1px rgba(86, 156, 255, 0.38);
+}
+
 .camera-cta {
   width: fit-content;
   max-width: 100%;
@@ -427,6 +464,11 @@ h1 {
   min-height: 0;
 }
 
+.stage.stage--shadow .loader-card,
+.stage.stage--shadow .metrics {
+  display: none;
+}
+
 .stage-preview {
   position: absolute;
   top: 1.4rem;
@@ -448,6 +490,30 @@ h1 {
 
 #scene-root,
 #scene-root canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#scene-root.is-hidden {
+  display: none;
+}
+
+.shadow-stage {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at center, rgba(73, 37, 116, 0.22), transparent 32%),
+    linear-gradient(180deg, #020204 0%, #05050a 100%);
+}
+
+.shadow-stage.is-hidden {
+  display: none;
+}
+
+#shadow-canvas {
   width: 100%;
   height: 100%;
   display: block;
@@ -535,6 +601,10 @@ h1 {
     min-height: 54vh;
   }
 
+  .shadow-stage {
+    min-height: 54vh;
+  }
+
   .stage-tools {
     width: 100%;
     margin: 0;
@@ -551,6 +621,14 @@ h1 {
 @media (max-width: 700px) {
   .hero-header {
     padding: 1.25rem 1rem 1rem;
+  }
+
+  .prototype-switch {
+    width: 100%;
+  }
+
+  .prototype-option {
+    flex: 1 1 180px;
   }
 
   h1 {

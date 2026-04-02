@@ -14,6 +14,10 @@ const cameraCtaState = document.getElementById("camera-cta-state");
 const cameraCtaLabel = document.querySelector(".camera-cta-label");
 const audioToggleButton = document.getElementById("audio-toggle");
 const audioCtaState = document.getElementById("audio-cta-state");
+const recordButton = document.getElementById("record-button");
+const recordCtaState = document.getElementById("record-cta-state");
+const stopRecordButton = document.getElementById("stop-record-button");
+const stopRecordCtaState = document.getElementById("stop-record-cta-state");
 const trackingStatus = document.getElementById("tracking-status");
 const modelFileInput = document.getElementById("model-file");
 const modelUrlForm = document.getElementById("model-url-form");
@@ -41,6 +45,10 @@ const gltfLoader = new GLTFLoader();
 const appBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
 const spotAudio = new Audio(`${import.meta.env.BASE_URL}audio/tabuspot.mp3`);
 spotAudio.preload = "auto";
+let audioContext = null;
+let spotAudioSource = null;
+let recordingDestination = null;
+let recordingDownloadUrl = null;
 
 const prototypeCopy = {
   shadow: {
@@ -122,6 +130,11 @@ const state = {
   segmentationCanvas: document.createElement("canvas"),
   palmLogoCandidate: null,
   layerMix: 100,
+  mediaRecorder: null,
+  recordingChunks: [],
+  isRecordingShadow: false,
+  recordingIntroStartedAt: 0,
+  recordingMimeType: "",
   isDraggingView: false,
   activePointerId: null,
   lastPointerX: 0,
@@ -679,8 +692,43 @@ function updateAudioUi() {
   audioCtaState.textContent = isPlaying ? "Pausa" : "Play";
 }
 
+function updateRecordingUi() {
+  const isShadow = state.prototype === "shadow";
+  const supported = typeof MediaRecorder !== "undefined" && typeof shadowCanvas.captureStream === "function";
+  const canShow = isShadow && supported;
+  const formatLabel = state.recordingMimeType.includes("mp4") ? "MP4" : "WEBM";
+  recordButton.classList.toggle("is-hidden", !canShow);
+  stopRecordButton.classList.toggle("is-hidden", !canShow || !state.isRecordingShadow);
+  recordButton.classList.toggle("is-recording", state.isRecordingShadow);
+  recordButton.disabled = !canShow || state.isRecordingShadow;
+  stopRecordButton.disabled = !state.isRecordingShadow;
+  recordCtaState.textContent = state.isRecordingShadow ? `Registrazione ${formatLabel}` : `Video + spot · ${formatLabel}`;
+  stopRecordCtaState.textContent = state.isRecordingShadow ? "Scarica file" : "Pronto";
+}
+
+async function ensureSpotAudioRouting() {
+  if (!audioContext) {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) throw new Error("AudioContext non supportato");
+    audioContext = new AudioContextCtor();
+  }
+  if (!spotAudioSource) {
+    spotAudio.crossOrigin = "anonymous";
+    spotAudioSource = audioContext.createMediaElementSource(spotAudio);
+    spotAudioSource.connect(audioContext.destination);
+  }
+  if (!recordingDestination) {
+    recordingDestination = audioContext.createMediaStreamDestination();
+    spotAudioSource.connect(recordingDestination);
+  }
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+}
+
 async function toggleSpotAudio() {
   try {
+    await ensureSpotAudioRouting();
     if (spotAudio.paused) {
       await spotAudio.play();
     } else {
@@ -688,6 +736,128 @@ async function toggleSpotAudio() {
     }
   } catch (error) {
     console.error(error);
+  }
+  updateAudioUi();
+}
+
+function getRecorderMimeType() {
+  const candidates = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || "";
+}
+
+function getRecordingFilename() {
+  const extension = state.recordingMimeType.includes("mp4") ? "mp4" : "webm";
+  return `tabu-simulator-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
+}
+
+function clamp01(value) {
+  return THREE.MathUtils.clamp(value, 0, 1);
+}
+
+function smoothStep01(value) {
+  const clamped = clamp01(value);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+const SHADOW_RECORDING_INTRO_DURATION_MS = 6800;
+
+function downloadRecording(blob) {
+  if (recordingDownloadUrl) {
+    URL.revokeObjectURL(recordingDownloadUrl);
+  }
+  recordingDownloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = recordingDownloadUrl;
+  anchor.download = getRecordingFilename();
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+async function startShadowRecording() {
+  if (state.prototype !== "shadow" || state.isRecordingShadow) return;
+  if (!isWebcamActive()) {
+    trackingStatus.textContent = "Attiva la webcam prima di registrare";
+    return;
+  }
+  if (typeof MediaRecorder === "undefined" || typeof shadowCanvas.captureStream !== "function") {
+    trackingStatus.textContent = "Registrazione non supportata in questo browser";
+    return;
+  }
+
+  try {
+    await ensureSpotAudioRouting();
+    resizeShadowCanvas();
+
+    const canvasStream = shadowCanvas.captureStream(30);
+    const mixedStream = new MediaStream();
+    canvasStream.getVideoTracks().forEach((track) => mixedStream.addTrack(track));
+    recordingDestination.stream.getAudioTracks().forEach((track) => mixedStream.addTrack(track));
+
+    state.recordingChunks = [];
+    const mimeType = getRecorderMimeType();
+    state.recordingMimeType = mimeType || "video/webm";
+    state.mediaRecorder = mimeType
+      ? new MediaRecorder(mixedStream, { mimeType })
+      : new MediaRecorder(mixedStream);
+
+    state.mediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) {
+        state.recordingChunks.push(event.data);
+      }
+    });
+
+    state.mediaRecorder.addEventListener("stop", () => {
+      const blob = new Blob(state.recordingChunks, {
+        type: state.mediaRecorder?.mimeType || "video/webm",
+      });
+      if (blob.size > 0) {
+        downloadRecording(blob);
+        trackingStatus.textContent = "Registrazione scaricata";
+      } else {
+        trackingStatus.textContent = "Registrazione vuota";
+      }
+      state.recordingChunks = [];
+      state.mediaRecorder = null;
+      state.isRecordingShadow = false;
+      state.recordingIntroStartedAt = 0;
+      state.recordingMimeType = getRecorderMimeType() || "video/webm";
+      updateRecordingUi();
+    });
+
+    spotAudio.pause();
+    spotAudio.currentTime = 0;
+    await spotAudio.play();
+    state.mediaRecorder.start(250);
+    state.isRecordingShadow = true;
+    state.recordingIntroStartedAt = performance.now();
+    trackingStatus.textContent = "Registrazione Tabù in corso";
+  } catch (error) {
+    console.error(error);
+    trackingStatus.textContent = "Errore registrazione Tabù";
+    state.isRecordingShadow = false;
+    state.recordingIntroStartedAt = 0;
+    state.recordingMimeType = getRecorderMimeType() || "video/webm";
+  }
+
+  updateAudioUi();
+  updateRecordingUi();
+}
+
+function stopShadowRecording() {
+  if (!state.mediaRecorder || state.mediaRecorder.state === "inactive") return;
+  trackingStatus.textContent = "Chiusura registrazione...";
+  state.mediaRecorder.stop();
+  state.recordingIntroStartedAt = 0;
+  if (!spotAudio.paused) {
+    spotAudio.pause();
+    spotAudio.currentTime = 0;
   }
   updateAudioUi();
 }
@@ -710,6 +880,9 @@ function resetTrackingTargets() {
 }
 
 function stopWebcam() {
+  if (state.isRecordingShadow) {
+    stopShadowRecording();
+  }
   state.videoStream?.getTracks().forEach((track) => track.stop());
   state.videoStream = null;
   webcam.srcObject = null;
@@ -722,6 +895,8 @@ function stopWebcam() {
   trackingStatus.textContent = "Webcam disattivata";
   startButton.disabled = false;
   setCameraButtonState("Pronta al tracking", false);
+  updateAudioUi();
+  updateRecordingUi();
 }
 
 function onPointerDown(event) {
@@ -1434,12 +1609,17 @@ function drawSegmentationSilhouette(results) {
   shadowContext.restore();
 }
 
-function drawShadowPuppet(results) {
+function drawShadowPuppet(results, options = {}) {
   if (!results.faceLandmarks) return;
+  const { clearBackground = true, alpha = 1 } = options;
   resizeShadowCanvas();
-  shadowContext.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
-  shadowContext.fillStyle = "#000";
-  shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  if (clearBackground) {
+    shadowContext.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+    shadowContext.fillStyle = "#000";
+    shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  }
+  shadowContext.save();
+  shadowContext.globalAlpha = alpha;
   drawSegmentationSilhouette(results);
   drawBodySilhouette(results);
   drawFaceDetails(results.faceLandmarks);
@@ -1486,6 +1666,7 @@ function drawShadowPuppet(results) {
   ) {
     drawPalmLogo(state.palmLogoCandidate.handPoints);
   }
+  shadowContext.restore();
 }
 
 function drawMirroredVideoToShadowCanvas(alpha) {
@@ -1520,6 +1701,62 @@ function drawLayerView(results) {
     },
     landmarkAlpha,
   );
+}
+
+function drawRecordingIntroFrame(results, elapsedMs) {
+  resizeShadowCanvas();
+  shadowContext.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  shadowContext.fillStyle = "#000";
+  shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+
+  const webcamHoldMs = 1200;
+  const webcamToLandmarksMs = 800;
+  const landmarksHoldMs = 700;
+  const landmarksToTabuMs = SHADOW_RECORDING_INTRO_DURATION_MS - webcamHoldMs - webcamToLandmarksMs - landmarksHoldMs;
+
+  const phase1End = webcamHoldMs;
+  const phase2End = phase1End + webcamToLandmarksMs;
+  const phase3End = phase2End + landmarksHoldMs;
+  const phase4End = phase3End + landmarksToTabuMs;
+
+  let cameraAlpha = 0;
+  let landmarkAlpha = 0;
+  let tabuAlpha = 0;
+
+  if (elapsedMs <= phase1End) {
+    cameraAlpha = 1;
+  } else if (elapsedMs <= phase2End) {
+    const mix = smoothStep01((elapsedMs - phase1End) / webcamToLandmarksMs);
+    cameraAlpha = 1 - mix;
+    landmarkAlpha = mix;
+  } else if (elapsedMs <= phase3End) {
+    landmarkAlpha = 1;
+  } else if (elapsedMs <= phase4End) {
+    const mix = smoothStep01((elapsedMs - phase3End) / landmarksToTabuMs);
+    cameraAlpha = 0;
+    landmarkAlpha = 1 - mix;
+    tabuAlpha = mix;
+  } else {
+    tabuAlpha = 1;
+  }
+
+  drawMirroredVideoToShadowCanvas(cameraAlpha);
+  drawLandmarksToContext(
+    shadowContext,
+    shadowCanvas.width,
+    shadowCanvas.height,
+    results?.faceLandmarks || null,
+    {
+      leftHandLandmarks: results?.leftHandLandmarks,
+      rightHandLandmarks: results?.rightHandLandmarks,
+      poseLandmarks: results?.poseLandmarks,
+    },
+    landmarkAlpha,
+  );
+
+  if (tabuAlpha > 0) {
+    drawShadowPuppet(results, { clearBackground: false, alpha: tabuAlpha });
+  }
 }
 
 async function trackScene3d() {
@@ -1580,7 +1817,11 @@ function updatePrototypeUi() {
     spotAudio.pause();
     spotAudio.currentTime = 0;
   }
+  if (!isShadow && state.isRecordingShadow) {
+    stopShadowRecording();
+  }
   updateAudioUi();
+  updateRecordingUi();
   updateSceneModeVisibility();
   updatePrototypeUrl();
   clearShadowCanvas();
@@ -1646,7 +1887,17 @@ function animate(time) {
   } else if (state.prototype === "layer" && state.latestHolisticResults) {
     drawLayerView(state.latestHolisticResults);
   } else if (state.latestHolisticResults) {
-    drawShadowPuppet(state.latestHolisticResults);
+    if (state.isRecordingShadow && state.recordingIntroStartedAt > 0) {
+      const elapsed = performance.now() - state.recordingIntroStartedAt;
+      if (elapsed < SHADOW_RECORDING_INTRO_DURATION_MS) {
+        drawRecordingIntroFrame(state.latestHolisticResults, elapsed);
+      } else {
+        state.recordingIntroStartedAt = 0;
+        drawShadowPuppet(state.latestHolisticResults);
+      }
+    } else {
+      drawShadowPuppet(state.latestHolisticResults);
+    }
   } else {
     resizeShadowCanvas();
     clearShadowCanvas();
@@ -1680,6 +1931,8 @@ prototypeLayerButton.addEventListener("click", () => {
   setPrototype("layer");
 });
 audioToggleButton.addEventListener("click", toggleSpotAudio);
+recordButton.addEventListener("click", startShadowRecording);
+stopRecordButton.addEventListener("click", stopShadowRecording);
 shareButton.addEventListener("click", shareCurrentPrototype);
 
 loadPresetButton.addEventListener("click", async () => {
@@ -1729,7 +1982,9 @@ if (initialPrototype) {
 setPreviewMode("video-landmarks");
 setCameraButtonState("Pronta al tracking", false);
 updateLayerMixUi();
+state.recordingMimeType = getRecorderMimeType() || "video/webm";
 updatePrototypeUi();
+updateRecordingUi();
 resetToDemoScene();
 updateSceneModeVisibility();
 animate(0);

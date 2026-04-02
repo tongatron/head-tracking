@@ -255,6 +255,89 @@ h1 {
   box-shadow: 0 16px 40px rgba(1, 4, 9, 0.28);
 }
 
+.record-cta {
+  width: fit-content;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(255, 82, 82, 0.22);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #361717, #261012);
+  color: #f0f6fc;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+  box-shadow: 0 16px 40px rgba(77, 12, 12, 0.28);
+}
+
+.record-cta:hover {
+  border-color: rgba(255, 111, 111, 0.44);
+  transform: translateY(-1px);
+}
+
+.record-cta.is-recording {
+  background: linear-gradient(180deg, #bb2d2d, #871f1f);
+  border-color: rgba(255, 146, 146, 0.58);
+  box-shadow: 0 18px 38px rgba(155, 31, 31, 0.34);
+}
+
+.record-cta--stop {
+  border-color: rgba(255, 235, 196, 0.18);
+  background: linear-gradient(180deg, #2b2222, #1c1515);
+  box-shadow: 0 16px 40px rgba(26, 12, 12, 0.22);
+}
+
+.record-cta--stop:hover {
+  border-color: rgba(255, 235, 196, 0.32);
+}
+
+.record-cta-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(240, 246, 252, 0.06);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.record-cta-copy {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+}
+
+.record-cta-label {
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+
+.record-cta-state,
+.stop-record-cta-state {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(240, 246, 252, 0.72);
+  font-family:
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    monospace;
+}
+
+.record-cta.is-hidden {
+  display: none;
+}
+
 .audio-cta:hover {
   border-color: rgba(255, 111, 66, 0.34);
   transform: translateY(-1px);

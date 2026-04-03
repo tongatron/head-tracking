@@ -614,6 +614,138 @@ function resetToDemoScene() {
   setModelStatus("Oggetti 3D attivi");
 }
 
+function buildBatchLodPreset() {
+  const group = new THREE.Group();
+  const tiers = [
+    {
+      material: new THREE.MeshStandardMaterial({
+        color: "#69d2e7",
+        metalness: 0.35,
+        roughness: 0.28,
+      }),
+      high: new THREE.IcosahedronGeometry(0.34, 2),
+      mid: new THREE.IcosahedronGeometry(0.34, 1),
+      low: new THREE.IcosahedronGeometry(0.34, 0),
+      count: 72,
+      spreadX: [2.8, 5.9],
+      spreadZ: [-5.8, 5.8],
+      height: [-1.15, 1.4],
+      scale: [0.8, 1.32],
+    },
+    {
+      material: new THREE.MeshStandardMaterial({
+        color: "#f38630",
+        metalness: 0.28,
+        roughness: 0.34,
+      }),
+      high: new THREE.BoxGeometry(0.48, 0.48, 0.48, 4, 4, 4),
+      mid: new THREE.BoxGeometry(0.48, 0.48, 0.48, 2, 2, 2),
+      low: new THREE.BoxGeometry(0.48, 0.48, 0.48),
+      count: 54,
+      spreadX: [3.4, 6.8],
+      spreadZ: [-5.2, 5.2],
+      height: [-1.25, 1.25],
+      scale: [0.72, 1.18],
+    },
+    {
+      material: new THREE.MeshStandardMaterial({
+        color: "#c8ff00",
+        metalness: 0.42,
+        roughness: 0.22,
+      }),
+      high: new THREE.TorusKnotGeometry(0.2, 0.06, 96, 12),
+      mid: new THREE.TorusKnotGeometry(0.2, 0.06, 48, 8),
+      low: new THREE.TorusKnotGeometry(0.2, 0.06, 24, 6),
+      count: 24,
+      spreadX: [4.8, 7.6],
+      spreadZ: [-4.4, 4.4],
+      height: [-0.9, 1.85],
+      scale: [0.85, 1.24],
+    },
+  ];
+
+  const dummyMatrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const rotation = new THREE.Euler();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+
+  for (const tier of tiers) {
+    const geometries = [tier.high, tier.mid, tier.low];
+    const maxVertexCount = geometries.reduce((sum, geometry) => sum + geometry.attributes.position.count, 0);
+    const maxIndexCount = geometries.reduce((sum, geometry) => sum + (geometry.index?.count ?? 0), 0);
+    const batchedMesh = new THREE.BatchedMesh(tier.count, maxVertexCount, maxIndexCount, tier.material);
+
+    const geometryIds = geometries.map((geometry) => batchedMesh.addGeometry(geometry));
+
+    for (let index = 0; index < tier.count; index += 1) {
+      const side = index % 2 === 0 ? -1 : 1;
+      const x = side * THREE.MathUtils.lerp(tier.spreadX[0], tier.spreadX[1], Math.random());
+      const z = THREE.MathUtils.lerp(tier.spreadZ[0], tier.spreadZ[1], Math.random());
+      const y = THREE.MathUtils.lerp(tier.height[0], tier.height[1], Math.random());
+      const distanceFromCenter = Math.abs(x);
+      const distanceRatio =
+        (distanceFromCenter - tier.spreadX[0]) / Math.max(0.001, tier.spreadX[1] - tier.spreadX[0]);
+      const geometryId = distanceRatio < 0.35 ? geometryIds[0] : distanceRatio < 0.7 ? geometryIds[1] : geometryIds[2];
+      const instanceId = batchedMesh.addInstance(geometryId);
+
+      position.set(x, y, z);
+      rotation.set(
+        Math.random() * Math.PI * 0.65,
+        side * (0.2 + Math.random() * 0.8),
+        THREE.MathUtils.lerp(-0.55, 0.55, Math.random()),
+      );
+      quaternion.setFromEuler(rotation);
+      const size = THREE.MathUtils.lerp(tier.scale[0], tier.scale[1], Math.random());
+      scale.setScalar(size);
+      dummyMatrix.compose(position, quaternion, scale);
+      batchedMesh.setMatrixAt(instanceId, dummyMatrix);
+    }
+
+    group.add(batchedMesh);
+  }
+
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(4.2, 0.06, 18, 96),
+    new THREE.MeshStandardMaterial({
+      color: "#7bd6ff",
+      emissive: "#1e5773",
+      emissiveIntensity: 0.22,
+      metalness: 0.25,
+      roughness: 0.4,
+    }),
+  );
+  halo.rotation.x = Math.PI / 2;
+  halo.position.y = -1.38;
+  group.add(halo);
+
+  const markers = new THREE.Group();
+  const markerGeometry = new THREE.BoxGeometry(0.16, 0.04, 0.9);
+  const markerMaterial = new THREE.MeshStandardMaterial({
+    color: "#d3e7ff",
+    emissive: "#31516a",
+    emissiveIntensity: 0.14,
+    roughness: 0.55,
+  });
+  for (let index = 0; index < 9; index += 1) {
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+    marker.position.set(0, -1.75, -4 + index);
+    markers.add(marker);
+  }
+  group.add(markers);
+
+  return group;
+}
+
+function loadBatchLodPreset() {
+  clearLoadedModel();
+  setDemoObjectsVisible(false);
+  state.loadedModelRoot = buildBatchLodPreset();
+  contentGroup.add(state.loadedModelRoot);
+  floor.scale.setScalar(1.35);
+  setModelStatus("Preset Batch LOD attivo");
+}
+
 function updateSceneModeVisibility() {
   const isScene3d = state.prototype === "scene3d";
   const isMask3d = state.prototype === "mask3d";
@@ -973,6 +1105,16 @@ function updateRecordingUi() {
     "is-recording-mode",
     state.isRecordingCountdown || state.isRecordingShadow,
   );
+  updatePreviewActionsVisibility();
+}
+
+function updatePreviewActionsVisibility() {
+  const previewActions = document.querySelector(".preview-actions");
+  if (!previewActions) return;
+  const visibleChild = Array.from(previewActions.children).some(
+    (element) => !element.classList.contains("is-hidden"),
+  );
+  previewActions.classList.toggle("is-hidden", !visibleChild);
 }
 
 async function ensureSpotAudioRouting() {
@@ -2550,6 +2692,7 @@ function updatePrototypeUi() {
   overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
   state.lastVideoTime = -1;
   updateLayerConsoleUi();
+  updatePreviewActionsVisibility();
 }
 
 async function setPrototype(nextPrototype) {
@@ -2563,11 +2706,11 @@ async function setPrototype(nextPrototype) {
       trackingStatus.textContent =
         nextPrototype === "shadow"
           ? "Shadow puppet attivo"
-          : nextPrototype === "layer"
-            ? "Layer tracking attivo"
-            : nextPrototype === "mask3d"
-              ? "Palloncino attivo"
-              : "Tracking attivo";
+        : nextPrototype === "layer"
+          ? "Layer tracking attivo"
+          : nextPrototype === "mask3d"
+            ? "Palloncino attivo"
+            : "Tracking attivo";
     } catch (error) {
       console.error(error);
       trackingStatus.textContent = "Errore cambio prototipo";
@@ -2679,6 +2822,10 @@ loadPresetButton.addEventListener("click", async () => {
   const selectedValue = presetModelSelect.value;
   if (selectedValue === "demo") {
     resetToDemoScene();
+    return;
+  }
+  if (selectedValue === "batch-lod") {
+    loadBatchLodPreset();
     return;
   }
   await loadModel(selectedValue, presetModelSelect.selectedOptions[0]?.textContent || selectedValue);

@@ -62,13 +62,13 @@
             Ambienti 3D
           </button>
           <button
-            id="prototype-mask"
+            id="prototype-characters"
             class="prototype-option"
             type="button"
             role="tab"
             aria-selected="false"
           >
-            Palloncino
+            Personaggi 3D
           </button>
           <button
             id="prototype-layer"
@@ -77,16 +77,7 @@
             role="tab"
             aria-selected="false"
           >
-            Layers
-          </button>
-          <button
-            id="prototype-matrix"
-            class="prototype-option"
-            type="button"
-            role="tab"
-            aria-selected="false"
-          >
-            Matrix
+            Testing
           </button>
         </div>
 
@@ -136,26 +127,6 @@
           </details>
 
           <div class="preview-actions">
-            <section id="matrix-face-card" class="layer-mix-card is-hidden">
-              <div class="layer-mix-head">
-                <div>
-                  <span class="status-label">Volto Matrix</span>
-                  <strong>Da codice a realistico</strong>
-                </div>
-                <strong id="matrix-face-value" class="layer-mix-value">25%</strong>
-              </div>
-
-              <label class="layer-mix-label" for="matrix-face-range">
-                Regola quanto il volto usa la struttura dei landmark oppure la luminosita reale della webcam.
-              </label>
-              <input id="matrix-face-range" type="range" min="0" max="100" step="1" value="25" />
-
-              <div class="layer-mix-scale" aria-hidden="true">
-                <span>0% Landmark</span>
-                <span>100% Realistico</span>
-              </div>
-            </section>
-
             <button id="audio-toggle" class="audio-cta is-hidden" type="button">
               <span class="audio-cta-icon" aria-hidden="true">♪</span>
               <span class="audio-cta-copy">
@@ -219,18 +190,13 @@
           <section class="loader-card">
             <div>
               <span class="status-label">Modello 3D</span>
-              <strong id="model-status">Scene demo attiva</strong>
+              <strong id="model-status">Oggetti 3D attivi</strong>
             </div>
 
             <div class="preset-row">
               <select id="preset-model-select" aria-label="Scegli un modello preset">
-                <option value="demo">Scene demo</option>
-                <option value="models/crystal-bloom.glb">Crystal Bloom</option>
-                <option value="models/orb-garden.glb">Orb Garden</option>
-                <option value="models/portal-stack.glb">Portal Stack</option>
-                <option value="models/signal-totem.glb">Signal Totem</option>
-                <option value="models/data-bloom.glb">Data Bloom</option>
-                <option value="models/mono-rover.glb">Mono Rover</option>
+                <option value="demo">Oggetti 3D</option>
+                <option value="models/LittlestTokyo.glb">Littlest Tokyo</option>
               </select>
               <button id="load-preset-button" type="button">Apri preset</button>
             </div>

@@ -1,6 +1,8 @@
 import "./style.css";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 const sceneRoot = document.getElementById("scene-root");
@@ -36,9 +38,8 @@ const landmarksVideoButton = document.getElementById("landmarks-video");
 const landmarksOnlyButton = document.getElementById("landmarks-only");
 const prototypeShadowButton = document.getElementById("prototype-shadow");
 const prototype3dButton = document.getElementById("prototype-3d");
-const prototypeMaskButton = document.getElementById("prototype-mask");
+const prototypeCharactersButton = document.getElementById("prototype-characters");
 const prototypeLayerButton = document.getElementById("prototype-layer");
-const prototypeMatrixButton = document.getElementById("prototype-matrix");
 const shareButton = document.getElementById("share-button");
 const heroTitle = document.getElementById("hero-title");
 const heroIntro = document.getElementById("hero-intro");
@@ -47,13 +48,14 @@ const layerMixRange = document.getElementById("layer-mix-range");
 const layerMixValue = document.getElementById("layer-mix-value");
 const layerConsoleCard = document.getElementById("layer-console-card");
 const layerConsoleOutput = document.getElementById("layer-console-output");
-const matrixFaceCard = document.getElementById("matrix-face-card");
-const matrixFaceRange = document.getElementById("matrix-face-range");
-const matrixFaceValue = document.getElementById("matrix-face-value");
 const stage = document.querySelector(".stage");
 
 const overlayContext = webcamOverlay.getContext("2d");
 const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+gltfLoader.setDRACOLoader(dracoLoader);
 const appBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
 const spotAudio = new Audio(`${import.meta.env.BASE_URL}audio/tabuspot.mp3`);
 spotAudio.preload = "auto";
@@ -75,19 +77,14 @@ const prototypeCopy = {
       "Il prototipo usa la webcam del device per stimare posizione e distanza del volto. Lo spostamento della testa orbita la camera attorno alla scena 3D; avvicinandoti o allontanandoti cambi lo zoom.",
   },
   mask3d: {
-    title: "Palloncino",
+    title: "Personaggi 3D",
     intro:
       "Una testa 3D morbida e minimale segue la testa in tempo reale con occhi e bocca reattivi, come un personaggio a palloncino.",
   },
   layer: {
-    title: "Layers",
+    title: "Testing",
     intro:
       "Una vista full-screen mostra tutti i landmark disponibili del tracking, inclusi volto, mani e pose. Il blend ti permette di miscelare camera e layer dal 0% al 100%.",
-  },
-  matrix: {
-    title: "Matrix",
-    intro:
-      "Una pioggia di simboli verdi scende sullo schermo. Quando attivi la webcam, volto, mani e posa vengono trasformati in un'apparizione fatta solo di landmark dentro il flusso.",
   },
 };
 
@@ -96,7 +93,6 @@ const prototypeQueryMap = {
   scene3d: "scene3d",
   mask3d: "mask3d",
   layer: "layer",
-  matrix: "matrix",
 };
 
 const FACE_OVAL_INDEXES = [
@@ -138,9 +134,16 @@ const state = {
   previewMode: "video-landmarks",
   videoStream: null,
   animationFrameId: 0,
+  lastAnimationFrameTime: 0,
   lastVideoTime: -1,
   activeObjectUrl: null,
   loadedModelRoot: null,
+  loadedModelMixer: null,
+  characterRoot: null,
+  characterMixer: null,
+  characterLoadPromise: null,
+  characterBones: null,
+  characterRestPose: null,
   faceLandmarker: null,
   holistic: null,
   holisticBusy: false,
@@ -198,6 +201,12 @@ scene.add(stageGroup);
 const contentGroup = new THREE.Group();
 stageGroup.add(contentGroup);
 
+const characterStageGroup = new THREE.Group();
+characterStageGroup.visible = false;
+scene.add(characterStageGroup);
+const characterAnchor = new THREE.Group();
+characterStageGroup.add(characterAnchor);
+
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(7.5, 96),
   new THREE.MeshStandardMaterial({
@@ -210,9 +219,29 @@ floor.rotation.x = -Math.PI / 2;
 floor.position.y = -1.8;
 stageGroup.add(floor);
 
+const characterFloor = new THREE.Mesh(
+  new THREE.CircleGeometry(5.6, 80),
+  new THREE.MeshStandardMaterial({
+    color: "#101b28",
+    metalness: 0.08,
+    roughness: 0.92,
+  }),
+);
+characterFloor.rotation.x = -Math.PI / 2;
+characterFloor.position.y = -1.8;
+characterStageGroup.add(characterFloor);
+
 const grid = new THREE.GridHelper(16, 24, "#4db5ff", "#1b3555");
 grid.position.y = -1.79;
 stageGroup.add(grid);
+
+const characterBackLight = new THREE.PointLight("#6b8cff", 18, 20, 2);
+characterBackLight.position.set(-2.8, 2.8, -3.2);
+characterStageGroup.add(characterBackLight);
+
+const characterRimLight = new THREE.PointLight("#8bf7dd", 14, 16, 2);
+characterRimLight.position.set(2.5, 3.4, 2.6);
+characterStageGroup.add(characterRimLight);
 
 const maskGroup = new THREE.Group();
 maskGroup.visible = false;
@@ -542,6 +571,10 @@ function resolveModelSource(source) {
 
 function clearLoadedModel() {
   if (!state.loadedModelRoot) return;
+  if (state.loadedModelMixer) {
+    state.loadedModelMixer.stopAllAction();
+    state.loadedModelMixer = null;
+  }
   contentGroup.remove(state.loadedModelRoot);
   state.loadedModelRoot.traverse((node) => {
     if (node.geometry) node.geometry.dispose();
@@ -549,6 +582,23 @@ function clearLoadedModel() {
     else if (node.material) node.material.dispose();
   });
   state.loadedModelRoot = null;
+}
+
+function clearCharacterModel() {
+  if (!state.characterRoot) return;
+  if (state.characterMixer) {
+    state.characterMixer.stopAllAction();
+    state.characterMixer = null;
+  }
+  characterAnchor.remove(state.characterRoot);
+  state.characterRoot.traverse((node) => {
+    if (node.geometry) node.geometry.dispose();
+    if (Array.isArray(node.material)) node.material.forEach((material) => material.dispose());
+    else if (node.material) node.material.dispose();
+  });
+  state.characterRoot = null;
+  state.characterBones = null;
+  state.characterRestPose = null;
 }
 
 function setDemoObjectsVisible(visible) {
@@ -561,12 +611,15 @@ function resetToDemoScene() {
   clearLoadedModel();
   setDemoObjectsVisible(true);
   floor.scale.setScalar(1);
-  setModelStatus("Scene demo attiva");
+  setModelStatus("Oggetti 3D attivi");
 }
 
 function updateSceneModeVisibility() {
   const isScene3d = state.prototype === "scene3d";
   const isMask3d = state.prototype === "mask3d";
+  const isCharacters = state.prototype === "characters";
+  stageGroup.visible = isScene3d;
+  characterStageGroup.visible = isCharacters;
   floor.visible = isScene3d;
   grid.visible = isScene3d;
   objects.forEach((mesh) => {
@@ -575,10 +628,16 @@ function updateSceneModeVisibility() {
   if (state.loadedModelRoot) {
     state.loadedModelRoot.visible = isScene3d;
   }
+  if (state.characterRoot) {
+    state.characterRoot.visible = isCharacters;
+  }
   maskGroup.visible = isMask3d;
   if (isMask3d) {
     scene.background = new THREE.Color("#070b12");
     scene.fog = new THREE.Fog("#070b12", 10, 24);
+  } else if (isCharacters) {
+    scene.background = new THREE.Color("#060b12");
+    scene.fog = new THREE.Fog("#060b12", 12, 26);
   } else {
     scene.background = new THREE.Color("#08111f");
     scene.fog = new THREE.Fog("#08111f", 14, 30);
@@ -620,11 +679,105 @@ async function loadModel(source, label) {
     });
     frameModel(state.loadedModelRoot);
     contentGroup.add(state.loadedModelRoot);
-    setModelStatus(`Modello caricato: ${label}`);
+    if (gltf.animations?.length) {
+      state.loadedModelMixer = new THREE.AnimationMixer(state.loadedModelRoot);
+      gltf.animations.forEach((clip) => {
+        const action = state.loadedModelMixer.clipAction(clip);
+        action.reset();
+        action.play();
+      });
+      setModelStatus(`Modello animato: ${label}`);
+    } else {
+      setModelStatus(`Modello caricato: ${label}`);
+    }
   } catch (error) {
     console.error(error);
     setModelStatus("Errore caricamento modello");
   }
+}
+
+function frameCharacterModel(root) {
+  const boundingBox = new THREE.Box3().setFromObject(root);
+  const size = boundingBox.getSize(new THREE.Vector3());
+  const center = boundingBox.getCenter(new THREE.Vector3());
+  const maxDimension = Math.max(size.x, size.y, size.z, 0.001);
+  const scale = 4.4 / maxDimension;
+
+  root.position.sub(center);
+  root.scale.setScalar(scale);
+
+  const adjustedBox = new THREE.Box3().setFromObject(root);
+  root.position.y += -1.8 - adjustedBox.min.y;
+  root.position.z -= adjustedBox.getCenter(new THREE.Vector3()).z;
+}
+
+function collectCharacterBones(root) {
+  if (!root) return null;
+  const names = [
+    "mixamorig:Hips",
+    "mixamorig:Spine",
+    "mixamorig:Spine1",
+    "mixamorig:Spine2",
+    "mixamorig:Neck",
+    "mixamorig:Head",
+    "mixamorig:LeftShoulder",
+    "mixamorig:LeftArm",
+    "mixamorig:LeftForeArm",
+    "mixamorig:LeftHand",
+    "mixamorig:RightShoulder",
+    "mixamorig:RightArm",
+    "mixamorig:RightForeArm",
+    "mixamorig:RightHand",
+  ];
+  return names.reduce((accumulator, name) => {
+    accumulator[name] = root.getObjectByName(name) || null;
+    return accumulator;
+  }, {});
+}
+
+function collectCharacterRestPose(bones) {
+  if (!bones) return null;
+  return Object.entries(bones).reduce((accumulator, [name, bone]) => {
+    if (bone) {
+      accumulator[name] = bone.quaternion.clone();
+    }
+    return accumulator;
+  }, {});
+}
+
+async function ensureCharacterModelLoaded() {
+  if (state.characterRoot) return state.characterRoot;
+  if (state.characterLoadPromise) return state.characterLoadPromise;
+
+  setModelStatus("Caricamento personaggio...");
+  state.characterLoadPromise = fbxLoader
+    .loadAsync(resolveModelSource("models/HipHopDancing.fbx"))
+    .then((fbx) => {
+      clearCharacterModel();
+      state.characterRoot = fbx;
+      state.characterRoot.traverse((node) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
+      frameCharacterModel(state.characterRoot);
+      characterAnchor.add(state.characterRoot);
+      state.characterBones = collectCharacterBones(state.characterRoot);
+      state.characterRestPose = collectCharacterRestPose(state.characterBones);
+      setModelStatus("Personaggio 3D pronto");
+      return state.characterRoot;
+    })
+    .catch((error) => {
+      console.error(error);
+      setModelStatus("Errore caricamento personaggio");
+      throw error;
+    })
+    .finally(() => {
+      state.characterLoadPromise = null;
+    });
+
+  return state.characterLoadPromise;
 }
 
 function updatePreviewModeUi() {
@@ -704,12 +857,6 @@ function updateLayerConsoleUi() {
   ].join("\n");
 }
 
-function updateMatrixFaceUi() {
-  const value = Math.round(state.matrixFaceMix);
-  matrixFaceRange.value = String(value);
-  matrixFaceValue.textContent = `${value}%`;
-}
-
 function updatePrototypeUrl() {
   const url = new URL(window.location.href);
   url.searchParams.set("prototype", prototypeQueryMap[state.prototype] || "scene3d");
@@ -722,8 +869,8 @@ function getInitialPrototypeFromUrl() {
   if (prototype === "shadow") return "shadow";
   if (prototype === "scene3d") return "scene3d";
   if (prototype === "mask3d") return "mask3d";
+  if (prototype === "characters") return "mask3d";
   if (prototype === "layer") return "layer";
-  if (prototype === "matrix") return "matrix";
   return null;
 }
 
@@ -1205,6 +1352,65 @@ function updateHeadTarget(landmarks) {
   targetHead.z = THREE.MathUtils.clamp(faceHeight, 0.12, 0.52);
 }
 
+function averagePosePoints(poseLandmarks, indexes) {
+  const points = indexes.map((index) => poseLandmarks[index]).filter(Boolean);
+  if (!points.length) return null;
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+    z: points.reduce((sum, point) => sum + (point.z ?? 0), 0) / points.length,
+  };
+}
+
+function getPoseMetrics(poseLandmarks) {
+  if (!poseLandmarks?.length) return null;
+  const leftShoulder = poseLandmarks[SHOULDER_LEFT_INDEX];
+  const rightShoulder = poseLandmarks[SHOULDER_RIGHT_INDEX];
+  const leftElbow = poseLandmarks[ELBOW_LEFT_INDEX];
+  const rightElbow = poseLandmarks[ELBOW_RIGHT_INDEX];
+  const leftWrist = poseLandmarks[WRIST_LEFT_INDEX];
+  const rightWrist = poseLandmarks[WRIST_RIGHT_INDEX];
+  const leftHip = poseLandmarks[HIP_LEFT_INDEX];
+  const rightHip = poseLandmarks[HIP_RIGHT_INDEX];
+  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) return null;
+
+  const shoulderCenter = averagePosePoints(poseLandmarks, [SHOULDER_LEFT_INDEX, SHOULDER_RIGHT_INDEX]);
+  const hipCenter = averagePosePoints(poseLandmarks, [HIP_LEFT_INDEX, HIP_RIGHT_INDEX]);
+  const shoulderWidth = Math.max(
+    Math.hypot(rightShoulder.x - leftShoulder.x, rightShoulder.y - leftShoulder.y),
+    0.0001,
+  );
+  const torsoHeight = Math.max(Math.abs(hipCenter.y - shoulderCenter.y), 0.0001);
+  return {
+    shoulderCenter,
+    hipCenter,
+    shoulderWidth,
+    torsoHeight,
+    shoulderTilt: Math.atan2(rightShoulder.y - leftShoulder.y, rightShoulder.x - leftShoulder.x),
+    shoulderDepth: THREE.MathUtils.clamp((leftShoulder.z ?? 0) - (rightShoulder.z ?? 0), -0.3, 0.3),
+    torsoLean: THREE.MathUtils.clamp((shoulderCenter.y - hipCenter.y) / torsoHeight, -1.2, 0.2),
+    leftArmAngle: leftElbow ? Math.atan2(leftElbow.y - leftShoulder.y, leftElbow.x - leftShoulder.x) : 0,
+    rightArmAngle: rightElbow ? Math.atan2(rightElbow.y - rightShoulder.y, rightElbow.x - rightShoulder.x) : 0,
+    leftForearmAngle:
+      leftElbow && leftWrist ? Math.atan2(leftWrist.y - leftElbow.y, leftWrist.x - leftElbow.x) : 0,
+    rightForearmAngle:
+      rightElbow && rightWrist ? Math.atan2(rightWrist.y - rightElbow.y, rightWrist.x - rightElbow.x) : 0,
+    leftHandLift: leftWrist ? THREE.MathUtils.clamp((leftShoulder.y - leftWrist.y) / shoulderWidth, -1.2, 1.4) : 0,
+    rightHandLift: rightWrist ? THREE.MathUtils.clamp((rightShoulder.y - rightWrist.y) / shoulderWidth, -1.2, 1.4) : 0,
+  };
+}
+
+const tempCharacterEuler = new THREE.Euler();
+const tempCharacterQuaternion = new THREE.Quaternion();
+
+function applyBoneOffset(bone, baseQuaternion, x = 0, y = 0, z = 0, blend = 0.42) {
+  if (!bone || !baseQuaternion) return;
+  tempCharacterEuler.set(x, y, z, "XYZ");
+  tempCharacterQuaternion.setFromEuler(tempCharacterEuler);
+  tempCharacterQuaternion.premultiply(baseQuaternion);
+  bone.quaternion.slerp(tempCharacterQuaternion, blend);
+}
+
 function smoothTracking() {
   smoothedHead.yaw = THREE.MathUtils.lerp(smoothedHead.yaw, targetHead.yaw, 0.13);
   smoothedHead.pitch = THREE.MathUtils.lerp(smoothedHead.pitch, targetHead.pitch, 0.13);
@@ -1266,6 +1472,96 @@ function updateMaskScene() {
   maskPupilRight.position.set(0.58 + pupilOffsetX, 0.35 + pupilOffsetY, 1.52);
   maskBowLeft.rotation.y = Math.sin(performance.now() * 0.004) * 0.08;
   maskBowRight.rotation.y = -Math.sin(performance.now() * 0.004) * 0.08;
+}
+
+function updateCharacterScene(time, deltaSeconds) {
+  camera.position.set(smoothedHead.x * 1.2, 1.25 - smoothedHead.y * 0.7, 7.4);
+  camera.lookAt(smoothedHead.x * 0.6, 0.5 - smoothedHead.y * 0.28, 0);
+  camera.rotation.z = 0;
+  characterStageGroup.rotation.y = Math.sin(time * 0.00018) * 0.05;
+
+  if (!state.characterRoot) return;
+
+  const poseMetrics = getPoseMetrics(state.latestHolisticResults?.poseLandmarks);
+  const shoulderCenter = poseMetrics?.shoulderCenter;
+  const hipCenter = poseMetrics?.hipCenter;
+  characterAnchor.position.x = shoulderCenter
+    ? THREE.MathUtils.lerp(characterAnchor.position.x, (0.5 - shoulderCenter.x) * 4.2, 0.18)
+    : smoothedHead.x * 0.7;
+  characterAnchor.position.y = hipCenter
+    ? THREE.MathUtils.lerp(characterAnchor.position.y, (0.68 - hipCenter.y) * 1.8, 0.16)
+    : THREE.MathUtils.lerp(characterAnchor.position.y, 0, 0.1);
+  characterAnchor.position.z = THREE.MathUtils.lerp(characterAnchor.position.z, smoothedHead.yaw * 0.35, 0.16);
+  characterAnchor.rotation.y = THREE.MathUtils.lerp(characterAnchor.rotation.y, smoothedHead.yaw * 0.8, 0.18);
+  characterAnchor.rotation.x = THREE.MathUtils.lerp(characterAnchor.rotation.x, smoothedHead.pitch * 0.14, 0.16);
+
+  const bones = state.characterBones;
+  const restPose = state.characterRestPose;
+  if (!bones || !restPose) return;
+
+  const spine = bones["mixamorig:Spine"];
+  const spine1 = bones["mixamorig:Spine1"];
+  const spine2 = bones["mixamorig:Spine2"];
+  const hips = bones["mixamorig:Hips"];
+  const neck = bones["mixamorig:Neck"];
+  const head = bones["mixamorig:Head"];
+  const leftShoulder = bones["mixamorig:LeftShoulder"];
+  const leftArm = bones["mixamorig:LeftArm"];
+  const leftForeArm = bones["mixamorig:LeftForeArm"];
+  const leftHand = bones["mixamorig:LeftHand"];
+  const rightShoulder = bones["mixamorig:RightShoulder"];
+  const rightArm = bones["mixamorig:RightArm"];
+  const rightForeArm = bones["mixamorig:RightForeArm"];
+  const rightHand = bones["mixamorig:RightHand"];
+
+  const shoulderTilt = poseMetrics?.shoulderTilt ?? 0;
+  const shoulderDepth = poseMetrics?.shoulderDepth ?? 0;
+  const torsoLean = poseMetrics ? poseMetrics.torsoLean + 0.82 : 0;
+  const leftHandLift = poseMetrics?.leftHandLift ?? 0;
+  const rightHandLift = poseMetrics?.rightHandLift ?? 0;
+
+  applyBoneOffset(hips, restPose["mixamorig:Hips"], torsoLean * 0.2, smoothedHead.yaw * 0.18, -shoulderTilt * 0.32, 0.26);
+  applyBoneOffset(spine, restPose["mixamorig:Spine"], torsoLean * 0.46, shoulderDepth * 1.7, -shoulderTilt * 0.8, 0.32);
+  applyBoneOffset(spine1, restPose["mixamorig:Spine1"], torsoLean * 0.34, shoulderDepth * 1.2, -shoulderTilt * 0.56, 0.32);
+  applyBoneOffset(spine2, restPose["mixamorig:Spine2"], torsoLean * 0.18, shoulderDepth * 0.7, -shoulderTilt * 0.34, 0.32);
+  applyBoneOffset(neck, restPose["mixamorig:Neck"], smoothedHead.pitch * 0.55, smoothedHead.yaw * 0.7, 0, 0.36);
+  applyBoneOffset(head, restPose["mixamorig:Head"], smoothedHead.pitch * 0.72, smoothedHead.yaw * 0.9, -smoothedHead.roll * 1.15, 0.38);
+  applyBoneOffset(leftShoulder, restPose["mixamorig:LeftShoulder"], 0, 0, THREE.MathUtils.clamp(-leftHandLift * 0.9, -1.1, 1.1), 0.34);
+  applyBoneOffset(rightShoulder, restPose["mixamorig:RightShoulder"], 0, 0, THREE.MathUtils.clamp(rightHandLift * 0.9, -1.1, 1.1), 0.34);
+  applyBoneOffset(
+    leftArm,
+    restPose["mixamorig:LeftArm"],
+    THREE.MathUtils.clamp(-leftHandLift * 0.46, -0.7, 0.7),
+    0,
+    THREE.MathUtils.clamp((poseMetrics?.leftArmAngle ?? -1.05) + 1.05, -1.35, 1.1) * 0.92,
+    0.38,
+  );
+  applyBoneOffset(
+    rightArm,
+    restPose["mixamorig:RightArm"],
+    THREE.MathUtils.clamp(-rightHandLift * 0.46, -0.7, 0.7),
+    0,
+    THREE.MathUtils.clamp((poseMetrics?.rightArmAngle ?? 2.1) - 2.1, -1.1, 1.35) * 0.92,
+    0.38,
+  );
+  applyBoneOffset(
+    leftForeArm,
+    restPose["mixamorig:LeftForeArm"],
+    0,
+    0,
+    THREE.MathUtils.clamp((poseMetrics?.leftForearmAngle ?? -0.7) + 0.7, -1.35, 1.2) * 0.7,
+    0.42,
+  );
+  applyBoneOffset(
+    rightForeArm,
+    restPose["mixamorig:RightForeArm"],
+    0,
+    0,
+    THREE.MathUtils.clamp((poseMetrics?.rightForearmAngle ?? 2.35) - 2.35, -1.2, 1.35) * 0.7,
+    0.42,
+  );
+  applyBoneOffset(leftHand, restPose["mixamorig:LeftHand"], THREE.MathUtils.clamp(-leftHandLift * 0.5, -0.5, 0.5), 0, 0, 0.46);
+  applyBoneOffset(rightHand, restPose["mixamorig:RightHand"], THREE.MathUtils.clamp(-rightHandLift * 0.5, -0.5, 0.5), 0, 0, 0.46);
 }
 
 function drawHandOverlay(context, width, height, handLandmarks, alpha = 1) {
@@ -1401,12 +1697,20 @@ async function setupHolistic() {
   holistic.onResults((results) => {
     state.latestHolisticResults = results;
     state.latestFaceLandmarks = results.faceLandmarks || null;
+    if (results.faceLandmarks?.length) updateHeadTarget(results.faceLandmarks);
+    else resetTrackingTargets();
     drawOverlay(results.faceLandmarks, {
       leftHandLandmarks: results.leftHandLandmarks,
       rightHandLandmarks: results.rightHandLandmarks,
       poseLandmarks: results.poseLandmarks,
     });
-    if (results.faceLandmarks?.length) {
+    if (state.prototype === "characters") {
+      trackingStatus.textContent = results.poseLandmarks?.length
+        ? results.leftHandLandmarks || results.rightHandLandmarks
+          ? "Corpo e mani agganciati"
+          : "Corpo agganciato"
+        : "Cerca busto e braccia";
+    } else if (results.faceLandmarks?.length) {
       trackingStatus.textContent = results.leftHandLandmarks || results.rightHandLandmarks
         ? "Volto e mani rilevati"
         : "Volto rilevato";
@@ -1422,9 +1726,6 @@ async function ensureTrackerForActivePrototype() {
   if (state.prototype === "scene3d" || state.prototype === "mask3d") {
     trackingStatus.textContent = "Caricamento face tracking...";
     await setupFaceLandmarker();
-  } else if (state.prototype === "matrix") {
-    trackingStatus.textContent = "Caricamento Matrix...";
-    await setupHolistic();
   } else {
     trackingStatus.textContent = state.prototype === "layer" ? "Caricamento layer tracking..." : "Caricamento shadow puppet...";
     await setupHolistic();
@@ -1456,8 +1757,6 @@ async function startWebcam() {
     trackingStatus.textContent =
       state.prototype === "shadow"
         ? "Shadow puppet attivo"
-        : state.prototype === "matrix"
-          ? "Matrix attivo"
         : state.prototype === "layer"
           ? "Layer tracking attivo"
         : state.prototype === "mask3d"
@@ -2217,29 +2516,24 @@ function updatePrototypeUi() {
   heroIntro.textContent = copy.intro;
   prototypeShadowButton.classList.toggle("is-active", state.prototype === "shadow");
   prototype3dButton.classList.toggle("is-active", state.prototype === "scene3d");
-  prototypeMaskButton.classList.toggle("is-active", state.prototype === "mask3d");
+  prototypeCharactersButton.classList.toggle("is-active", state.prototype === "mask3d");
   prototypeLayerButton.classList.toggle("is-active", state.prototype === "layer");
-  prototypeMatrixButton.classList.toggle("is-active", state.prototype === "matrix");
   prototypeShadowButton.setAttribute("aria-selected", String(state.prototype === "shadow"));
   prototype3dButton.setAttribute("aria-selected", String(state.prototype === "scene3d"));
-  prototypeMaskButton.setAttribute("aria-selected", String(state.prototype === "mask3d"));
+  prototypeCharactersButton.setAttribute("aria-selected", String(state.prototype === "mask3d"));
   prototypeLayerButton.setAttribute("aria-selected", String(state.prototype === "layer"));
-  prototypeMatrixButton.setAttribute("aria-selected", String(state.prototype === "matrix"));
   const isShadow = state.prototype === "shadow";
   const isLayer = state.prototype === "layer";
   const isMask = state.prototype === "mask3d";
-  const isMatrix = state.prototype === "matrix";
   const hidePreview = isLayer || state.isRecordingCountdown || state.isRecordingShadow;
   stage.classList.toggle("stage--shadow", isShadow);
   stage.classList.toggle("stage--layer", isLayer);
   stage.classList.toggle("stage--mask", isMask);
-  stage.classList.toggle("stage--matrix", isMatrix);
   document.querySelector(".preview-card")?.classList.toggle("is-hidden", hidePreview);
-  shadowStage.classList.toggle("is-hidden", !isShadow && !isLayer && !isMatrix);
-  sceneRoot.classList.toggle("is-hidden", isShadow || isLayer || isMatrix);
+  shadowStage.classList.toggle("is-hidden", !isShadow && !isLayer);
+  sceneRoot.classList.toggle("is-hidden", isShadow || isLayer);
   layerMixCard.classList.toggle("is-hidden", !isLayer);
   layerConsoleCard.classList.toggle("is-hidden", !isLayer);
-  matrixFaceCard.classList.toggle("is-hidden", !isMatrix);
   document.querySelector(".status-card")?.classList.toggle("is-hidden", !isLayer);
   if (!isShadow && !spotAudio.paused) {
     spotAudio.pause();
@@ -2269,13 +2563,11 @@ async function setPrototype(nextPrototype) {
       trackingStatus.textContent =
         nextPrototype === "shadow"
           ? "Shadow puppet attivo"
-          : nextPrototype === "matrix"
-            ? "Matrix attivo"
           : nextPrototype === "layer"
             ? "Layer tracking attivo"
-          : nextPrototype === "mask3d"
-            ? "Palloncino attivo"
-            : "Tracking attivo";
+            : nextPrototype === "mask3d"
+              ? "Palloncino attivo"
+              : "Tracking attivo";
     } catch (error) {
       console.error(error);
       trackingStatus.textContent = "Errore cambio prototipo";
@@ -2286,39 +2578,40 @@ async function setPrototype(nextPrototype) {
     trackingStatus.textContent =
       nextPrototype === "shadow"
         ? "Attiva la webcam per Tabù"
-        : nextPrototype === "matrix"
-          ? "Attiva la webcam per Matrix"
         : nextPrototype === "layer"
-          ? "Attiva la webcam per Layers"
-        : nextPrototype === "mask3d"
-          ? "Attiva la webcam per Palloncino"
-          : "In attesa della webcam...";
+          ? "Attiva la webcam per Testing"
+          : nextPrototype === "mask3d"
+            ? "Attiva la webcam per Palloncino"
+            : "In attesa della webcam...";
   }
 }
 
 function animate(time) {
   state.animationFrameId = requestAnimationFrame(animate);
+  const deltaSeconds = state.lastAnimationFrameTime ? Math.min((time - state.lastAnimationFrameTime) / 1000, 0.05) : 0;
+  state.lastAnimationFrameTime = time;
 
   if (isWebcamActive()) {
     if (state.prototype === "scene3d" || state.prototype === "mask3d") trackScene3d();
-    else if (state.prototype === "shadow" || state.prototype === "layer" || state.prototype === "matrix") trackShadowPrototype();
+    else if (state.prototype === "shadow" || state.prototype === "layer") trackShadowPrototype();
   }
 
   if (state.prototype === "scene3d") {
     smoothTracking();
     updateCamera(time);
+    if (state.loadedModelMixer && deltaSeconds > 0) {
+      state.loadedModelMixer.update(deltaSeconds);
+    }
     objects.forEach((mesh, index) => {
       mesh.rotation.x += 0.0035 + index * 0.00005;
       mesh.rotation.y += 0.005 + index * 0.00004;
     });
-    if (state.loadedModelRoot) state.loadedModelRoot.rotation.y += 0.0035;
+    if (state.loadedModelRoot && !state.loadedModelMixer) state.loadedModelRoot.rotation.y += 0.0035;
     renderer.render(scene, camera);
   } else if (state.prototype === "mask3d") {
     smoothTracking();
     updateMaskScene();
     renderer.render(scene, camera);
-  } else if (state.prototype === "matrix") {
-    drawMatrixView(time);
   } else if (state.prototype === "layer" && state.latestHolisticResults) {
     drawLayerView(state.latestHolisticResults);
   } else if (state.latestHolisticResults) {
@@ -2369,14 +2662,11 @@ prototypeShadowButton.addEventListener("click", () => {
 prototype3dButton.addEventListener("click", () => {
   setPrototype("scene3d");
 });
-prototypeMaskButton.addEventListener("click", () => {
+prototypeCharactersButton.addEventListener("click", () => {
   setPrototype("mask3d");
 });
 prototypeLayerButton.addEventListener("click", () => {
   setPrototype("layer");
-});
-prototypeMatrixButton.addEventListener("click", () => {
-  setPrototype("matrix");
 });
 audioToggleButton.addEventListener("click", toggleSpotAudio);
 recordButton.addEventListener("click", startShadowRecording);
@@ -2403,10 +2693,6 @@ landmarksOnlyButton.addEventListener("click", () => {
 layerMixRange.addEventListener("input", (event) => {
   state.layerMix = Number(event.target.value);
   updateLayerMixUi();
-});
-matrixFaceRange.addEventListener("input", (event) => {
-  state.matrixFaceMix = Number(event.target.value);
-  updateMatrixFaceUi();
 });
 
 modelFileInput.addEventListener("change", async (event) => {
@@ -2436,7 +2722,6 @@ if (initialPrototype) {
 setPreviewMode("video-landmarks");
 setCameraButtonState("Pronta al tracking", false);
 updateLayerMixUi();
-updateMatrixFaceUi();
 state.recordingMimeType = getRecorderMimeType() || "video/webm";
 updatePrototypeUi();
 updateRecordingUi();

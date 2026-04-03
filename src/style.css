@@ -682,7 +682,7 @@ h1 {
   display: none;
 }
 
-.stage.stage--matrix .loader-card {
+.stage.stage--characters .loader-card {
   display: none;
 }
 
@@ -783,13 +783,6 @@ h1 {
   background:
     radial-gradient(circle at center, rgba(73, 37, 116, 0.22), transparent 32%),
     linear-gradient(180deg, #020204 0%, #05050a 100%);
-}
-
-.stage.stage--matrix .shadow-stage {
-  background:
-    radial-gradient(circle at center, rgba(34, 126, 72, 0.18), transparent 26%),
-    radial-gradient(circle at top center, rgba(18, 92, 56, 0.12), transparent 30%),
-    linear-gradient(180deg, #010403 0%, #020a06 100%);
 }
 
 .shadow-stage.is-hidden {

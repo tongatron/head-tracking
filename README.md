@@ -1,25 +1,60 @@
 # Head Tracking
 
-Web app sperimentale per controllare una scena 3D con il movimento del volto tramite webcam del device.
+Web app sperimentale basata su webcam per esplorare diversi prototipi di tracking in tempo reale:
 
-L'app usa face tracking in browser per stimare posizione e distanza della testa, poi traduce questi dati in movimento della camera in una scena `three.js`.
+- `Tabù simulator`
+- `Ambienti 3D`
+- `Palloncino`
+- `Layers`
+- `Matrix`
 
-## Stack
+L'app combina tracking facciale, landmark di volto/mani/posa, rendering 2D e scene 3D in browser. Oltre alla navigazione di scene `three.js`, include filtri stilizzati, visualizzazioni tecniche dei landmark e registrazione video della scena `Tabù`.
 
-- `Vite`
-- `three`
-- `@mediapipe/tasks-vision`
+## Tecnologie utilizzate
 
-## Funzioni principali
+- `Vite` per sviluppo locale e build
+- `three` per rendering 3D, camera motion e scena `Ambienti 3D` / `Palloncino`
+- `@mediapipe/tasks-vision` per `FaceLandmarker` e stima della testa nei prototipi 3D
+- `MediaPipe Holistic` via CDN per volto, mani e posa nei prototipi `Tabù`, `Layers` e `Matrix`
+- `HTML5 Canvas 2D` per overlay landmark, shadow puppet, Matrix e registrazione della scena
+- `MediaRecorder` per registrare la scena `Tabù` direttamente nel browser
+- `Web Audio API` per gestire e mixare l'audio dello spot nella registrazione
+- `GLTFLoader` di `three/examples` per caricare modelli `.glb`
 
-- tracking del volto via webcam
-- landmark facciali con overlay video
-- controllo della camera 3D con yaw, pitch e distanza
+## Prototipi inclusi
+
+### Tabù simulator
+
+- filtro teatrale ispirato agli spot Tabù
+- tracking di volto e mani
+- preview webcam + landmark
+- riproduzione dello spot audio
+- registrazione della scena finale con anteprima inline e download manuale
+
+### Ambienti 3D
+
+- controllo della camera 3D con yaw, pitch e distanza del volto
 - drag manuale della vista con click e trascinamento
-- caricamento di modelli `.glb` locali
-- caricamento di modelli da URL
+- caricamento di modelli `.glb` locali o da URL
 - preset 3D inclusi nel progetto
-- deploy su GitHub Pages
+
+### Palloncino
+
+- avatar/testa 3D minimale che segue il volto
+- occhi e bocca reattivi
+
+### Layers
+
+- visualizzazione full-screen di tutti i landmark disponibili
+- supporto a volto, mani e pose
+- blend regolabile tra camera e landmark
+- console live con variabili di tracking in tempo reale
+
+### Matrix
+
+- pioggia di simboli verdi stile Matrix
+- integrazione dei landmark nel flusso
+- mix regolabile tra resa landmark e resa più realistica del volto
 
 ## Avvio locale
 
@@ -32,7 +67,7 @@ npm run dev -- --host 127.0.0.1
 Apri:
 
 ```text
-http://127.0.0.1:5173/
+http://127.0.0.1:4174/head-tracking/
 ```
 
 Per esporre il server anche ad altri dispositivi sulla rete locale:
@@ -66,6 +101,16 @@ Il `base` di Vite è impostato su:
 
 Questo serve per far funzionare correttamente asset e bundle quando il sito è pubblicato sotto il path del repository.
 
+## Registrazione video
+
+Nel prototipo `Tabù simulator` è disponibile una registrazione browser-side della scena:
+
+- countdown iniziale
+- intro webcam -> landmark -> Tabù
+- audio dello spot incluso nel file
+- anteprima del video generato direttamente nella pagina
+- download manuale tramite pulsante `Scarica file`
+
 ## Modelli 3D inclusi
 
 I preset locali sono in:
@@ -83,6 +128,7 @@ Lo script che genera i modelli di esempio è:
 ```text
 head-tracking/
 ├─ .github/workflows/
+├─ public/audio/
 ├─ public/models/
 ├─ src/
 │  ├─ main.js
@@ -97,4 +143,6 @@ head-tracking/
 
 - I preset `.glb` vengono risolti con `import.meta.env.BASE_URL`, quindi funzionano sia in locale sia su GitHub Pages.
 - Il browser deve avere accesso alla webcam e l'utente deve concedere il permesso.
+- I prototipi `Tabù`, `Layers` e `Matrix` dipendono da `MediaPipe Holistic` caricato via CDN.
+- La registrazione usa `MediaRecorder`: il formato finale dipende dal supporto del browser (`mp4` o `webm`).
 - Su mobile o altri device conviene usare HTTPS o un host locale accessibile in rete.

@@ -45,6 +45,8 @@ const heroIntro = document.getElementById("hero-intro");
 const layerMixCard = document.getElementById("layer-mix-card");
 const layerMixRange = document.getElementById("layer-mix-range");
 const layerMixValue = document.getElementById("layer-mix-value");
+const layerConsoleCard = document.getElementById("layer-console-card");
+const layerConsoleOutput = document.getElementById("layer-console-output");
 const matrixFaceCard = document.getElementById("matrix-face-card");
 const matrixFaceRange = document.getElementById("matrix-face-range");
 const matrixFaceValue = document.getElementById("matrix-face-value");
@@ -643,6 +645,63 @@ function updateLayerMixUi() {
   const value = Math.round(state.layerMix);
   layerMixRange.value = String(value);
   layerMixValue.textContent = `${value}%`;
+}
+
+function formatConsoleNumber(value, digits = 3) {
+  if (!Number.isFinite(value)) return "-";
+  return Number(value).toFixed(digits);
+}
+
+function updateLayerConsoleUi() {
+  if (!layerConsoleOutput) return;
+
+  const results = state.latestHolisticResults;
+  const face = state.latestFaceLandmarks;
+  const leftHand = results?.leftHandLandmarks;
+  const rightHand = results?.rightHandLandmarks;
+  const pose = results?.poseLandmarks;
+
+  const mouthOpen = face?.length ? Math.abs((face[14]?.y ?? 0.5) - (face[13]?.y ?? 0.5)) : 0;
+  const leftEyeOpen = face?.length ? Math.abs((face[145]?.y ?? 0.4) - (face[159]?.y ?? 0.4)) : 0;
+  const rightEyeOpen = face?.length ? Math.abs((face[374]?.y ?? 0.4) - (face[386]?.y ?? 0.4)) : 0;
+
+  layerConsoleOutput.textContent = [
+    `prototype: ${state.prototype}`,
+    `webcam_active: ${isWebcamActive()}`,
+    `preview_mode: ${state.previewMode}`,
+    `tracking_status: ${trackingStatus.textContent || "-"}`,
+    `layer_mix: ${Math.round(state.layerMix)}%`,
+    "",
+    `face_detected: ${Boolean(face?.length)}`,
+    `face_landmarks: ${face?.length ?? 0}`,
+    `left_hand_detected: ${Boolean(leftHand?.length)}`,
+    `left_hand_landmarks: ${leftHand?.length ?? 0}`,
+    `right_hand_detected: ${Boolean(rightHand?.length)}`,
+    `right_hand_landmarks: ${rightHand?.length ?? 0}`,
+    `pose_detected: ${Boolean(pose?.length)}`,
+    `pose_landmarks: ${pose?.length ?? 0}`,
+    "",
+    `target_yaw: ${formatConsoleNumber(targetHead.yaw)}`,
+    `target_pitch: ${formatConsoleNumber(targetHead.pitch)}`,
+    `target_roll: ${formatConsoleNumber(targetHead.roll)}`,
+    `target_x: ${formatConsoleNumber(targetHead.x)}`,
+    `target_y: ${formatConsoleNumber(targetHead.y)}`,
+    `target_z: ${formatConsoleNumber(targetHead.z)}`,
+    "",
+    `smoothed_yaw: ${formatConsoleNumber(smoothedHead.yaw)}`,
+    `smoothed_pitch: ${formatConsoleNumber(smoothedHead.pitch)}`,
+    `smoothed_roll: ${formatConsoleNumber(smoothedHead.roll)}`,
+    `smoothed_x: ${formatConsoleNumber(smoothedHead.x)}`,
+    `smoothed_y: ${formatConsoleNumber(smoothedHead.y)}`,
+    `smoothed_z: ${formatConsoleNumber(smoothedHead.z)}`,
+    "",
+    `manual_yaw: ${formatConsoleNumber(manualView.yaw)}`,
+    `manual_pitch: ${formatConsoleNumber(manualView.pitch)}`,
+    "",
+    `mouth_open: ${formatConsoleNumber(mouthOpen, 4)}`,
+    `left_eye_open: ${formatConsoleNumber(leftEyeOpen, 4)}`,
+    `right_eye_open: ${formatConsoleNumber(rightEyeOpen, 4)}`,
+  ].join("\n");
 }
 
 function updateMatrixFaceUi() {
@@ -2179,6 +2238,7 @@ function updatePrototypeUi() {
   shadowStage.classList.toggle("is-hidden", !isShadow && !isLayer && !isMatrix);
   sceneRoot.classList.toggle("is-hidden", isShadow || isLayer || isMatrix);
   layerMixCard.classList.toggle("is-hidden", !isLayer);
+  layerConsoleCard.classList.toggle("is-hidden", !isLayer);
   matrixFaceCard.classList.toggle("is-hidden", !isMatrix);
   document.querySelector(".status-card")?.classList.toggle("is-hidden", !isLayer);
   if (!isShadow && !spotAudio.paused) {
@@ -2195,6 +2255,7 @@ function updatePrototypeUi() {
   clearShadowCanvas();
   overlayContext.clearRect(0, 0, webcamOverlay.width, webcamOverlay.height);
   state.lastVideoTime = -1;
+  updateLayerConsoleUi();
 }
 
 async function setPrototype(nextPrototype) {
@@ -2285,7 +2346,9 @@ function animate(time) {
     shadowContext.fillStyle = "#000";
     shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
   }
-
+  if (state.prototype === "layer") {
+    updateLayerConsoleUi();
+  }
 }
 
 function onWindowResize() {

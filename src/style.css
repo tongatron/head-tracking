@@ -863,6 +863,40 @@ h1 {
   display: none;
 }
 
+.layer-console-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: rgba(13, 17, 23, 0.86);
+  border: 1px solid rgba(240, 246, 252, 0.08);
+}
+
+.layer-console-card.is-hidden {
+  display: none;
+}
+
+.layer-console-output {
+  margin: 0;
+  min-height: 220px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  background: #0b0f14;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  color: #a7f3d0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family:
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    monospace;
+}
+
 .layer-mix-head {
   display: flex;
   justify-content: space-between;

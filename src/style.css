@@ -728,6 +728,10 @@ h1 {
   width: 100%;
 }
 
+.stage-preview .audio-cta {
+  width: 100%;
+}
+
 .recording-preview-card {
   display: grid;
   gap: 0.8rem;

@@ -219,9 +219,9 @@ h1 {
   align-items: center;
   margin: 0;
   padding: 0.7rem 0.85rem;
-  border: 1px solid rgba(240, 246, 252, 0.08);
+  border: 1px solid rgba(255, 210, 90, 0.38);
   border-radius: 12px;
-  background: linear-gradient(180deg, #212830, #1a2028);
+  background: linear-gradient(180deg, #5b4412, #3f310e);
   color: #f0f6fc;
   cursor: pointer;
   transition:
@@ -229,7 +229,7 @@ h1 {
     background 180ms ease,
     transform 180ms ease,
     box-shadow 180ms ease;
-  box-shadow: 0 16px 40px rgba(1, 4, 9, 0.35);
+  box-shadow: 0 16px 40px rgba(76, 55, 9, 0.32);
 }
 
 .audio-cta {
@@ -418,7 +418,7 @@ h1 {
 }
 
 .camera-cta:hover {
-  border-color: rgba(56, 139, 253, 0.34);
+  border-color: rgba(255, 223, 120, 0.62);
   transform: translateY(-1px);
 }
 
@@ -428,6 +428,10 @@ h1 {
 
 .camera-cta:not(.is-active) .camera-cta-icon {
   animation: pulse-camera 1.9s ease-in-out infinite;
+}
+
+.camera-cta:not(.is-active):hover {
+  background: linear-gradient(180deg, #6a5117, #4a3911);
 }
 
 .camera-cta.is-active {

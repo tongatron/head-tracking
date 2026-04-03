@@ -1005,6 +1005,7 @@ async function startShadowRecording() {
   if (state.prototype !== "shadow" || state.isRecordingShadow || state.isRecordingCountdown) return;
   if (!isWebcamActive()) {
     trackingStatus.textContent = "Attiva la webcam prima di registrare";
+    updateRecordingUi();
     return;
   }
   state.isRecordingCountdown = true;
@@ -1405,11 +1406,13 @@ async function startWebcam() {
           : "Tracking attivo";
     startButton.disabled = false;
     setCameraButtonState("Camera attiva", true);
+    updateRecordingUi();
   } catch (error) {
     console.error(error);
     trackingStatus.textContent = "Errore webcam o modello";
     startButton.disabled = false;
     setCameraButtonState("Errore, riprova", false);
+    updateRecordingUi();
   }
 }
 

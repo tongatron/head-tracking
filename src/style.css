@@ -299,6 +299,36 @@ h1 {
   border-color: rgba(255, 235, 196, 0.32);
 }
 
+.record-cta--download {
+  border-color: rgba(120, 191, 255, 0.2);
+  background: linear-gradient(180deg, #182539, #111b2b);
+  box-shadow: 0 16px 40px rgba(10, 29, 56, 0.24);
+}
+
+.record-cta--download:hover {
+  border-color: rgba(120, 191, 255, 0.38);
+}
+
+.record-cta--screen {
+  border-color: rgba(95, 144, 255, 0.24);
+  background: linear-gradient(180deg, #15233c, #10182a);
+  box-shadow: 0 16px 40px rgba(9, 20, 48, 0.26);
+}
+
+.record-cta--screen:hover {
+  border-color: rgba(120, 191, 255, 0.42);
+}
+
+.record-cta--share {
+  border-color: rgba(121, 234, 171, 0.2);
+  background: linear-gradient(180deg, #163126, #10231b);
+  box-shadow: 0 16px 40px rgba(8, 40, 29, 0.24);
+}
+
+.record-cta--share:hover {
+  border-color: rgba(121, 234, 171, 0.36);
+}
+
 .record-cta-icon {
   width: 40px;
   height: 40px;
@@ -648,6 +678,10 @@ h1 {
   display: none;
 }
 
+.stage.stage--matrix .loader-card {
+  display: none;
+}
+
 .stage.stage--cartoon .loader-card {
   display: none;
 }
@@ -662,6 +696,53 @@ h1 {
 
 .stage-preview.is-hidden {
   display: none;
+}
+
+.status-card.is-hidden {
+  display: none;
+}
+
+.preview-actions {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.9rem;
+  padding: 1rem 1.05rem;
+  border-radius: 20px;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.96), rgba(13, 17, 23, 0.96));
+  box-shadow: 0 18px 40px rgba(1, 4, 9, 0.24);
+}
+
+.preview-actions.is-recording-mode {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 18px 40px rgba(1, 4, 9, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.stage-preview .record-cta {
+  width: 100%;
+}
+
+.recording-preview-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem 1.05rem;
+  border-radius: 16px;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  background: rgba(13, 17, 23, 0.78);
+}
+
+.recording-preview-card.is-hidden {
+  display: none;
+}
+
+#recording-preview-video {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+  background: #05070b;
+  border: 1px solid rgba(240, 246, 252, 0.08);
 }
 
 .stage-tools {
@@ -694,6 +775,13 @@ h1 {
   background:
     radial-gradient(circle at center, rgba(73, 37, 116, 0.22), transparent 32%),
     linear-gradient(180deg, #020204 0%, #05050a 100%);
+}
+
+.stage.stage--matrix .shadow-stage {
+  background:
+    radial-gradient(circle at center, rgba(34, 126, 72, 0.18), transparent 26%),
+    radial-gradient(circle at top center, rgba(18, 92, 56, 0.12), transparent 30%),
+    linear-gradient(180deg, #010403 0%, #020a06 100%);
 }
 
 .shadow-stage.is-hidden {
@@ -797,6 +885,7 @@ h1 {
   width: 100%;
   accent-color: #69d2e7;
 }
+
 
 .layer-mix-scale {
   display: flex;

@@ -18,6 +18,12 @@ const recordButton = document.getElementById("record-button");
 const recordCtaState = document.getElementById("record-cta-state");
 const stopRecordButton = document.getElementById("stop-record-button");
 const stopRecordCtaState = document.getElementById("stop-record-cta-state");
+const downloadRecordButton = document.getElementById("download-record-button");
+const downloadRecordCtaState = document.getElementById("download-record-cta-state");
+const recordingPreviewCard = document.getElementById("recording-preview-card");
+const recordingPreviewVideo = document.getElementById("recording-preview-video");
+const shareRecordButton = document.getElementById("share-record-button");
+const shareRecordCtaState = document.getElementById("share-record-cta-state");
 const trackingStatus = document.getElementById("tracking-status");
 const modelFileInput = document.getElementById("model-file");
 const modelUrlForm = document.getElementById("model-url-form");
@@ -32,12 +38,16 @@ const prototypeShadowButton = document.getElementById("prototype-shadow");
 const prototype3dButton = document.getElementById("prototype-3d");
 const prototypeMaskButton = document.getElementById("prototype-mask");
 const prototypeLayerButton = document.getElementById("prototype-layer");
+const prototypeMatrixButton = document.getElementById("prototype-matrix");
 const shareButton = document.getElementById("share-button");
 const heroTitle = document.getElementById("hero-title");
 const heroIntro = document.getElementById("hero-intro");
 const layerMixCard = document.getElementById("layer-mix-card");
 const layerMixRange = document.getElementById("layer-mix-range");
 const layerMixValue = document.getElementById("layer-mix-value");
+const matrixFaceCard = document.getElementById("matrix-face-card");
+const matrixFaceRange = document.getElementById("matrix-face-range");
+const matrixFaceValue = document.getElementById("matrix-face-value");
 const stage = document.querySelector(".stage");
 
 const overlayContext = webcamOverlay.getContext("2d");
@@ -49,6 +59,7 @@ let audioContext = null;
 let spotAudioSource = null;
 let recordingDestination = null;
 let recordingDownloadUrl = null;
+let recordingPreviewUrl = null;
 
 const prototypeCopy = {
   shadow: {
@@ -71,6 +82,11 @@ const prototypeCopy = {
     intro:
       "Una vista full-screen mostra tutti i landmark disponibili del tracking, inclusi volto, mani e pose. Il blend ti permette di miscelare camera e layer dal 0% al 100%.",
   },
+  matrix: {
+    title: "Matrix",
+    intro:
+      "Una pioggia di simboli verdi scende sullo schermo. Quando attivi la webcam, volto, mani e posa vengono trasformati in un'apparizione fatta solo di landmark dentro il flusso.",
+  },
 };
 
 const prototypeQueryMap = {
@@ -78,6 +94,7 @@ const prototypeQueryMap = {
   scene3d: "scene3d",
   mask3d: "mask3d",
   layer: "layer",
+  matrix: "matrix",
 };
 
 const FACE_OVAL_INDEXES = [
@@ -135,6 +152,14 @@ const state = {
   isRecordingShadow: false,
   recordingIntroStartedAt: 0,
   recordingMimeType: "",
+  lastRecordingBlob: null,
+  isRecordingCountdown: false,
+  recordingCountdownStartedAt: 0,
+  matrixSampleCanvas: document.createElement("canvas"),
+  matrixColumns: [],
+  lastMatrixFrameTime: 0,
+  matrixSubjectStrength: 0,
+  matrixFaceMix: 25,
   isDraggingView: false,
   activePointerId: null,
   lastPointerX: 0,
@@ -620,6 +645,12 @@ function updateLayerMixUi() {
   layerMixValue.textContent = `${value}%`;
 }
 
+function updateMatrixFaceUi() {
+  const value = Math.round(state.matrixFaceMix);
+  matrixFaceRange.value = String(value);
+  matrixFaceValue.textContent = `${value}%`;
+}
+
 function updatePrototypeUrl() {
   const url = new URL(window.location.href);
   url.searchParams.set("prototype", prototypeQueryMap[state.prototype] || "scene3d");
@@ -633,6 +664,7 @@ function getInitialPrototypeFromUrl() {
   if (prototype === "scene3d") return "scene3d";
   if (prototype === "mask3d") return "mask3d";
   if (prototype === "layer") return "layer";
+  if (prototype === "matrix") return "matrix";
   return null;
 }
 
@@ -696,14 +728,45 @@ function updateRecordingUi() {
   const isShadow = state.prototype === "shadow";
   const supported = typeof MediaRecorder !== "undefined" && typeof shadowCanvas.captureStream === "function";
   const canShow = isShadow && supported;
+  const isAnyRecording = state.isRecordingShadow;
   const formatLabel = state.recordingMimeType.includes("mp4") ? "MP4" : "WEBM";
+  const isTouchDevice =
+    typeof navigator !== "undefined" &&
+    (navigator.maxTouchPoints > 0 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  const canShareFile =
+    Boolean(state.lastRecordingBlob) &&
+    isTouchDevice &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({
+      files: [new File([state.lastRecordingBlob], getRecordingFilename(), { type: state.lastRecordingBlob.type || state.recordingMimeType || "video/webm" })],
+  });
   recordButton.classList.toggle("is-hidden", !canShow);
-  stopRecordButton.classList.toggle("is-hidden", !canShow || !state.isRecordingShadow);
-  recordButton.classList.toggle("is-recording", state.isRecordingShadow);
-  recordButton.disabled = !canShow || state.isRecordingShadow;
-  stopRecordButton.disabled = !state.isRecordingShadow;
-  recordCtaState.textContent = state.isRecordingShadow ? `Registrazione ${formatLabel}` : `Video + spot · ${formatLabel}`;
-  stopRecordCtaState.textContent = state.isRecordingShadow ? "Scarica file" : "Pronto";
+  stopRecordButton.classList.toggle("is-hidden", !canShow || !isAnyRecording);
+  downloadRecordButton.classList.toggle("is-hidden", !isShadow || !state.lastRecordingBlob);
+  recordingPreviewCard.classList.toggle("is-hidden", !isShadow || !state.lastRecordingBlob || isAnyRecording);
+  shareRecordButton.classList.toggle("is-hidden", !isShadow || !canShareFile || isAnyRecording);
+  recordButton.classList.toggle("is-recording", state.isRecordingShadow || state.isRecordingCountdown);
+  recordButton.disabled = !canShow || isAnyRecording || state.isRecordingCountdown;
+  stopRecordButton.disabled = !isAnyRecording;
+  downloadRecordButton.disabled = !state.lastRecordingBlob;
+  shareRecordButton.disabled = !canShareFile || isAnyRecording;
+  recordCtaState.textContent = state.isRecordingCountdown
+    ? "Countdown 3, 2, 1"
+    : state.isRecordingShadow
+      ? `Registrazione ${formatLabel}`
+      : `Video + spot · ${formatLabel}`;
+  stopRecordCtaState.textContent = isAnyRecording ? "Scarica file" : "Pronto";
+  downloadRecordCtaState.textContent = state.lastRecordingBlob ? "Ultima registrazione" : "Nessun file";
+  shareRecordCtaState.textContent = state.lastRecordingBlob ? "File registrato" : "Non disponibile";
+  document.querySelector(".preview-card")?.classList.toggle(
+    "is-hidden",
+    state.prototype === "layer" || state.isRecordingCountdown || state.isRecordingShadow,
+  );
+  document.querySelector(".preview-actions")?.classList.toggle(
+    "is-recording-mode",
+    state.isRecordingCountdown || state.isRecordingShadow,
+  );
 }
 
 async function ensureSpotAudioRouting() {
@@ -725,6 +788,7 @@ async function ensureSpotAudioRouting() {
     await audioContext.resume();
   }
 }
+
 
 async function toggleSpotAudio() {
   try {
@@ -766,6 +830,7 @@ function smoothStep01(value) {
 }
 
 const SHADOW_RECORDING_INTRO_DURATION_MS = 6800;
+const SHADOW_RECORDING_COUNTDOWN_MS = 3000;
 
 function downloadRecording(blob) {
   if (recordingDownloadUrl) {
@@ -780,14 +845,60 @@ function downloadRecording(blob) {
   anchor.remove();
 }
 
-async function startShadowRecording() {
-  if (state.prototype !== "shadow" || state.isRecordingShadow) return;
+function getRecordingFile() {
+  if (!state.lastRecordingBlob) return null;
+  return new File([state.lastRecordingBlob], getRecordingFilename(), {
+    type: state.lastRecordingBlob.type || state.recordingMimeType || "video/webm",
+  });
+}
+
+function updateRecordingPreview() {
+  if (recordingPreviewUrl) {
+    URL.revokeObjectURL(recordingPreviewUrl);
+    recordingPreviewUrl = null;
+  }
+  if (!state.lastRecordingBlob) {
+    recordingPreviewVideo.removeAttribute("src");
+    recordingPreviewVideo.load();
+    return;
+  }
+  recordingPreviewUrl = URL.createObjectURL(state.lastRecordingBlob);
+  recordingPreviewVideo.src = recordingPreviewUrl;
+  recordingPreviewVideo.load();
+}
+
+function handleDownloadLastRecording() {
+  if (!state.lastRecordingBlob) return;
+  downloadRecording(state.lastRecordingBlob);
+}
+
+async function handleShareLastRecording() {
+  const file = getRecordingFile();
+  if (!file || !navigator.share || !navigator.canShare?.({ files: [file] })) return;
+  try {
+    await navigator.share({
+      title: "Tabù simulator",
+      text: "Registrazione Tabù",
+      files: [file],
+    });
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      console.error(error);
+    }
+  }
+}
+
+async function beginShadowRecording() {
+  state.isRecordingCountdown = false;
+  state.recordingCountdownStartedAt = 0;
   if (!isWebcamActive()) {
     trackingStatus.textContent = "Attiva la webcam prima di registrare";
+    updateRecordingUi();
     return;
   }
   if (typeof MediaRecorder === "undefined" || typeof shadowCanvas.captureStream !== "function") {
     trackingStatus.textContent = "Registrazione non supportata in questo browser";
+    updateRecordingUi();
     return;
   }
 
@@ -818,8 +929,9 @@ async function startShadowRecording() {
         type: state.mediaRecorder?.mimeType || "video/webm",
       });
       if (blob.size > 0) {
-        downloadRecording(blob);
-        trackingStatus.textContent = "Registrazione scaricata";
+        state.lastRecordingBlob = blob;
+        updateRecordingPreview();
+        trackingStatus.textContent = "File pronto per il download";
       } else {
         trackingStatus.textContent = "Registrazione vuota";
       }
@@ -828,6 +940,8 @@ async function startShadowRecording() {
       state.isRecordingShadow = false;
       state.recordingIntroStartedAt = 0;
       state.recordingMimeType = getRecorderMimeType() || "video/webm";
+      state.isRecordingCountdown = false;
+      state.recordingCountdownStartedAt = 0;
       updateRecordingUi();
     });
 
@@ -836,12 +950,16 @@ async function startShadowRecording() {
     await spotAudio.play();
     state.mediaRecorder.start(250);
     state.isRecordingShadow = true;
+    state.isRecordingCountdown = false;
+    state.recordingCountdownStartedAt = 0;
     state.recordingIntroStartedAt = performance.now();
     trackingStatus.textContent = "Registrazione Tabù in corso";
   } catch (error) {
     console.error(error);
     trackingStatus.textContent = "Errore registrazione Tabù";
     state.isRecordingShadow = false;
+    state.isRecordingCountdown = false;
+    state.recordingCountdownStartedAt = 0;
     state.recordingIntroStartedAt = 0;
     state.recordingMimeType = getRecorderMimeType() || "video/webm";
   }
@@ -850,7 +968,54 @@ async function startShadowRecording() {
   updateRecordingUi();
 }
 
+function drawRecordingCountdownOverlay(elapsedMs) {
+  const remaining = Math.max(0, SHADOW_RECORDING_COUNTDOWN_MS - elapsedMs);
+  const seconds = Math.max(1, Math.ceil(remaining / 1000));
+  const pulse = 1 + (1 - ((remaining % 1000) / 1000)) * 0.12;
+
+  shadowContext.save();
+  shadowContext.fillStyle = "rgba(0, 0, 0, 0.34)";
+  shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+
+  const cx = shadowCanvas.width * 0.5;
+  const cy = shadowCanvas.height * 0.46;
+  const radius = Math.min(shadowCanvas.width, shadowCanvas.height) * 0.11 * pulse;
+
+  shadowContext.beginPath();
+  shadowContext.arc(cx, cy, radius, 0, Math.PI * 2);
+  shadowContext.fillStyle = "rgba(255, 255, 255, 0.12)";
+  shadowContext.fill();
+  shadowContext.lineWidth = 4;
+  shadowContext.strokeStyle = "rgba(255, 255, 255, 0.24)";
+  shadowContext.stroke();
+
+  shadowContext.textAlign = "center";
+  shadowContext.textBaseline = "middle";
+  shadowContext.fillStyle = "#ffffff";
+  shadowContext.font = `900 ${Math.max(48, radius * 1.05)}px ui-sans-serif, system-ui, sans-serif`;
+  shadowContext.fillText(String(seconds), cx, cy + 2);
+
+  shadowContext.font = `700 ${Math.max(14, radius * 0.2)}px ui-monospace, monospace`;
+  shadowContext.fillStyle = "rgba(255, 255, 255, 0.86)";
+  shadowContext.fillText("REC IN PARTENZA", cx, cy + radius + 28);
+  shadowContext.restore();
+}
+
+async function startShadowRecording() {
+  if (state.prototype !== "shadow" || state.isRecordingShadow || state.isRecordingCountdown) return;
+  if (!isWebcamActive()) {
+    trackingStatus.textContent = "Attiva la webcam prima di registrare";
+    return;
+  }
+  state.isRecordingCountdown = true;
+  state.recordingCountdownStartedAt = performance.now();
+  trackingStatus.textContent = "Registrazione tra 3 secondi";
+  updateRecordingUi();
+}
+
 function stopShadowRecording() {
+  state.isRecordingCountdown = false;
+  state.recordingCountdownStartedAt = 0;
   if (!state.mediaRecorder || state.mediaRecorder.state === "inactive") return;
   trackingStatus.textContent = "Chiusura registrazione...";
   state.mediaRecorder.stop();
@@ -883,6 +1048,8 @@ function stopWebcam() {
   if (state.isRecordingShadow) {
     stopShadowRecording();
   }
+  state.isRecordingCountdown = false;
+  state.recordingCountdownStartedAt = 0;
   state.videoStream?.getTracks().forEach((track) => track.stop());
   state.videoStream = null;
   webcam.srcObject = null;
@@ -1195,6 +1362,9 @@ async function ensureTrackerForActivePrototype() {
   if (state.prototype === "scene3d" || state.prototype === "mask3d") {
     trackingStatus.textContent = "Caricamento face tracking...";
     await setupFaceLandmarker();
+  } else if (state.prototype === "matrix") {
+    trackingStatus.textContent = "Caricamento Matrix...";
+    await setupHolistic();
   } else {
     trackingStatus.textContent = state.prototype === "layer" ? "Caricamento layer tracking..." : "Caricamento shadow puppet...";
     await setupHolistic();
@@ -1226,6 +1396,8 @@ async function startWebcam() {
     trackingStatus.textContent =
       state.prototype === "shadow"
         ? "Shadow puppet attivo"
+        : state.prototype === "matrix"
+          ? "Matrix attivo"
         : state.prototype === "layer"
           ? "Layer tracking attivo"
         : state.prototype === "mask3d"
@@ -1703,6 +1875,192 @@ function drawLayerView(results) {
   );
 }
 
+const MATRIX_CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$#%&*+-/<>{}[]".split("");
+
+function resizeMatrixState() {
+  resizeShadowCanvas();
+  const fontSize = Math.max(14, Math.round(shadowCanvas.width / 64));
+  const columns = Math.max(18, Math.floor(shadowCanvas.width / fontSize));
+  const rows = Math.max(16, Math.floor(shadowCanvas.height / (fontSize * 0.95)));
+  if (state.matrixColumns.length !== columns) {
+    state.matrixColumns = Array.from({ length: columns }, (_, index) => ({
+      head: Math.random() * rows,
+      speed: 10 + (index % 5) * 1.2 + Math.random() * 4,
+      trail: 6 + Math.floor(Math.random() * 10),
+    }));
+  }
+  const sample = state.matrixSampleCanvas;
+  if (sample.width !== columns || sample.height !== rows) {
+    sample.width = columns;
+    sample.height = rows;
+  }
+  return { fontSize, columns, rows };
+}
+
+function getNormalizedHandCenter(handLandmarks) {
+  if (!handLandmarks?.length) return null;
+  const center = averagePoints([handLandmarks[0], handLandmarks[5], handLandmarks[9], handLandmarks[13], handLandmarks[17]]);
+  return { x: 1 - center.x, y: center.y };
+}
+
+function getMatrixInfluencers(results) {
+  const influencers = [];
+  if (results?.faceLandmarks?.length) {
+    const faceKeyIndexes = [10, 338, 297, 284, 251, 389, 454, 361, 397, 152, 172, 132, 93, 234, 127, 33, 263, 1, 61, 291, 13, 14];
+    faceKeyIndexes.forEach((index) => {
+      const point = results.faceLandmarks[index];
+      if (!point) return;
+      influencers.push({ x: 1 - point.x, y: point.y, radius: 0.08, force: 0.95, type: "face" });
+    });
+  }
+
+  for (const hand of [results?.leftHandLandmarks, results?.rightHandLandmarks]) {
+    if (!hand?.length) continue;
+    hand.forEach((point, index) => {
+      influencers.push({
+        x: 1 - point.x,
+        y: point.y,
+        radius: index === 0 ? 0.12 : 0.075,
+        force: index === 0 ? 1.4 : 1.05,
+        type: "hand",
+      });
+    });
+  }
+
+  if (results?.poseLandmarks?.length) {
+    [11, 12, 13, 14, 15, 16, 23, 24].forEach((index) => {
+      const point = results.poseLandmarks[index];
+      if (!point) return;
+      influencers.push({ x: 1 - point.x, y: point.y, radius: 0.09, force: 0.82, type: "pose" });
+    });
+  }
+  return influencers;
+}
+
+function drawMatrixView(time) {
+  const { fontSize, columns, rows } = resizeMatrixState();
+  const dt = state.lastMatrixFrameTime ? Math.min(0.05, (time - state.lastMatrixFrameTime) / 1000) : 0.016;
+  state.lastMatrixFrameTime = time;
+  const influencers = getMatrixInfluencers(state.latestHolisticResults);
+  const realismMix = clamp01(state.matrixFaceMix / 100);
+
+  shadowContext.fillStyle = "rgba(0, 10, 4, 0.22)";
+  shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  shadowContext.font = `700 ${fontSize}px ui-monospace, "SFMono-Regular", Menlo, monospace`;
+  shadowContext.textAlign = "center";
+  shadowContext.textBaseline = "middle";
+  let brightCells = 0;
+  let sampleData = null;
+
+  if (isWebcamActive() && webcam.readyState >= 2 && realismMix > 0) {
+    const sample = state.matrixSampleCanvas;
+    const sampleCtx = sample.getContext("2d", { willReadFrequently: true });
+    sampleCtx.clearRect(0, 0, sample.width, sample.height);
+    sampleCtx.save();
+    sampleCtx.translate(sample.width, 0);
+    sampleCtx.scale(-1, 1);
+    sampleCtx.drawImage(webcam, 0, 0, sample.width, sample.height);
+    sampleCtx.restore();
+    sampleData = sampleCtx.getImageData(0, 0, sample.width, sample.height).data;
+  }
+
+  shadowContext.save();
+  shadowContext.shadowBlur = fontSize * 0.7;
+  shadowContext.shadowColor = "rgba(58, 255, 138, 0.42)";
+
+  state.matrixColumns.forEach((column, columnIndex) => {
+    const columnNormX = columns <= 1 ? 0.5 : columnIndex / (columns - 1);
+    let columnForce = 0;
+    influencers.forEach((influencer) => {
+      const dx = Math.abs(columnNormX - influencer.x);
+      const effect = clamp01(1 - dx / influencer.radius) * influencer.force;
+      columnForce = Math.max(columnForce, effect);
+    });
+
+    column.head += (column.speed + columnForce * 6.5) * dt;
+    if (column.head - column.trail > rows + 2) {
+      column.head = -Math.random() * rows * 0.5;
+      column.speed = 10 + Math.random() * 6;
+      column.trail = 6 + Math.floor(Math.random() * 10) + Math.round(columnForce * 3);
+    }
+    const x = columnIndex * fontSize + fontSize * 0.5;
+
+    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+      const y = rowIndex * fontSize * 0.95 + fontSize * 0.55;
+      const rowNormY = rows <= 1 ? 0.5 : rowIndex / (rows - 1);
+      const distanceToHead = column.head - rowIndex;
+      const trailStrength =
+        distanceToHead >= 0 && distanceToHead <= column.trail
+          ? 1 - distanceToHead / column.trail
+          : 0;
+
+      let landmarkFlow = 0;
+      influencers.forEach((influencer) => {
+        const dx = columnNormX - influencer.x;
+        const dy = rowNormY - influencer.y;
+        const distance = Math.hypot(dx, dy);
+        const effect = clamp01(1 - distance / influencer.radius) * influencer.force;
+        landmarkFlow = Math.max(landmarkFlow, effect);
+      });
+
+      let sampleBrightness = 0;
+      if (sampleData) {
+        const sampleIndex = (rowIndex * columns + (columns - 1 - columnIndex)) * 4;
+        const red = sampleData[sampleIndex];
+        const greenSample = sampleData[sampleIndex + 1];
+        const blue = sampleData[sampleIndex + 2];
+        sampleBrightness = (red * 0.25 + greenSample * 0.6 + blue * 0.15) / 255;
+      }
+
+      const brightness = THREE.MathUtils.lerp(landmarkFlow, Math.max(landmarkFlow * 0.65, sampleBrightness), realismMix);
+      if (brightness > 0.48) brightCells += 1;
+
+      const silhouetteBoost = brightness > 0.56 ? (brightness - 0.56) * 1.9 : 0;
+      const visible = Math.max(trailStrength * 0.94, brightness * 1.18 - 0.08, silhouetteBoost, landmarkFlow * 0.9);
+      if (visible <= 0.08) continue;
+
+      const glyphIndex = Math.floor(
+        ((rowIndex * 7 + columnIndex * 11 + Math.floor(time * 0.02)) * (brightness > 0 ? 1 + brightness : 1)) %
+          MATRIX_CHARACTERS.length,
+      );
+      const glyph = MATRIX_CHARACTERS[(glyphIndex + MATRIX_CHARACTERS.length) % MATRIX_CHARACTERS.length];
+      const glow = clamp01(Math.max(brightness, trailStrength, landmarkFlow));
+      const green = Math.round(110 + glow * 145);
+      const alpha = clamp01(visible);
+
+      shadowContext.fillStyle =
+        trailStrength > 0.92 || brightness > 0.72 || landmarkFlow > 0.8
+          ? `rgba(225, 255, 235, ${Math.max(0.78, alpha)})`
+          : brightness > 0.52 || landmarkFlow > 0.45
+            ? `rgba(125, ${green}, 140, ${Math.min(1, alpha + 0.1)})`
+            : `rgba(70, ${green}, 96, ${alpha})`;
+      shadowContext.fillText(glyph, x, y);
+    }
+  });
+  shadowContext.restore();
+
+  const subjectRatio = brightCells / Math.max(1, columns * rows);
+  state.matrixSubjectStrength = THREE.MathUtils.lerp(state.matrixSubjectStrength, subjectRatio, 0.12);
+
+  shadowContext.save();
+  shadowContext.globalCompositeOperation = "screen";
+  shadowContext.fillStyle = `rgba(42, 255, 120, ${Math.min(0.14, state.matrixSubjectStrength * 1.1)})`;
+  shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  shadowContext.restore();
+
+  shadowContext.save();
+  shadowContext.strokeStyle = `rgba(110, 255, 170, ${Math.min(0.22, state.matrixSubjectStrength * 1.6)})`;
+  shadowContext.lineWidth = 1;
+  shadowContext.setLineDash([2, fontSize * 0.8]);
+  for (let x = fontSize * 0.5; x < shadowCanvas.width; x += fontSize * 3.4) {
+    shadowContext.beginPath();
+    shadowContext.moveTo(x, 0);
+    shadowContext.lineTo(x, shadowCanvas.height);
+    shadowContext.stroke();
+  }
+  shadowContext.restore();
+}
+
 function drawRecordingIntroFrame(results, elapsedMs) {
   resizeShadowCanvas();
   shadowContext.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
@@ -1799,20 +2157,27 @@ function updatePrototypeUi() {
   prototype3dButton.classList.toggle("is-active", state.prototype === "scene3d");
   prototypeMaskButton.classList.toggle("is-active", state.prototype === "mask3d");
   prototypeLayerButton.classList.toggle("is-active", state.prototype === "layer");
+  prototypeMatrixButton.classList.toggle("is-active", state.prototype === "matrix");
   prototypeShadowButton.setAttribute("aria-selected", String(state.prototype === "shadow"));
   prototype3dButton.setAttribute("aria-selected", String(state.prototype === "scene3d"));
   prototypeMaskButton.setAttribute("aria-selected", String(state.prototype === "mask3d"));
   prototypeLayerButton.setAttribute("aria-selected", String(state.prototype === "layer"));
+  prototypeMatrixButton.setAttribute("aria-selected", String(state.prototype === "matrix"));
   const isShadow = state.prototype === "shadow";
   const isLayer = state.prototype === "layer";
   const isMask = state.prototype === "mask3d";
+  const isMatrix = state.prototype === "matrix";
+  const hidePreview = isLayer || state.isRecordingCountdown || state.isRecordingShadow;
   stage.classList.toggle("stage--shadow", isShadow);
   stage.classList.toggle("stage--layer", isLayer);
   stage.classList.toggle("stage--mask", isMask);
-  document.querySelector(".stage-preview")?.classList.toggle("is-hidden", isLayer);
-  shadowStage.classList.toggle("is-hidden", !isShadow && !isLayer);
-  sceneRoot.classList.toggle("is-hidden", isShadow || isLayer);
+  stage.classList.toggle("stage--matrix", isMatrix);
+  document.querySelector(".preview-card")?.classList.toggle("is-hidden", hidePreview);
+  shadowStage.classList.toggle("is-hidden", !isShadow && !isLayer && !isMatrix);
+  sceneRoot.classList.toggle("is-hidden", isShadow || isLayer || isMatrix);
   layerMixCard.classList.toggle("is-hidden", !isLayer);
+  matrixFaceCard.classList.toggle("is-hidden", !isMatrix);
+  document.querySelector(".status-card")?.classList.toggle("is-hidden", !isLayer);
   if (!isShadow && !spotAudio.paused) {
     spotAudio.pause();
     spotAudio.currentTime = 0;
@@ -1840,6 +2205,8 @@ async function setPrototype(nextPrototype) {
       trackingStatus.textContent =
         nextPrototype === "shadow"
           ? "Shadow puppet attivo"
+          : nextPrototype === "matrix"
+            ? "Matrix attivo"
           : nextPrototype === "layer"
             ? "Layer tracking attivo"
           : nextPrototype === "mask3d"
@@ -1855,6 +2222,8 @@ async function setPrototype(nextPrototype) {
     trackingStatus.textContent =
       nextPrototype === "shadow"
         ? "Attiva la webcam per Tabù"
+        : nextPrototype === "matrix"
+          ? "Attiva la webcam per Matrix"
         : nextPrototype === "layer"
           ? "Attiva la webcam per Layers"
         : nextPrototype === "mask3d"
@@ -1868,7 +2237,7 @@ function animate(time) {
 
   if (isWebcamActive()) {
     if (state.prototype === "scene3d" || state.prototype === "mask3d") trackScene3d();
-    else trackShadowPrototype();
+    else if (state.prototype === "shadow" || state.prototype === "layer" || state.prototype === "matrix") trackShadowPrototype();
   }
 
   if (state.prototype === "scene3d") {
@@ -1884,10 +2253,19 @@ function animate(time) {
     smoothTracking();
     updateMaskScene();
     renderer.render(scene, camera);
+  } else if (state.prototype === "matrix") {
+    drawMatrixView(time);
   } else if (state.prototype === "layer" && state.latestHolisticResults) {
     drawLayerView(state.latestHolisticResults);
   } else if (state.latestHolisticResults) {
-    if (state.isRecordingShadow && state.recordingIntroStartedAt > 0) {
+    if (state.isRecordingCountdown && state.recordingCountdownStartedAt > 0) {
+      const countdownElapsed = performance.now() - state.recordingCountdownStartedAt;
+      drawShadowPuppet(state.latestHolisticResults);
+      drawRecordingCountdownOverlay(countdownElapsed);
+      if (countdownElapsed >= SHADOW_RECORDING_COUNTDOWN_MS) {
+        beginShadowRecording();
+      }
+    } else if (state.isRecordingShadow && state.recordingIntroStartedAt > 0) {
       const elapsed = performance.now() - state.recordingIntroStartedAt;
       if (elapsed < SHADOW_RECORDING_INTRO_DURATION_MS) {
         drawRecordingIntroFrame(state.latestHolisticResults, elapsed);
@@ -1904,6 +2282,7 @@ function animate(time) {
     shadowContext.fillStyle = "#000";
     shadowContext.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
   }
+
 }
 
 function onWindowResize() {
@@ -1930,9 +2309,14 @@ prototypeMaskButton.addEventListener("click", () => {
 prototypeLayerButton.addEventListener("click", () => {
   setPrototype("layer");
 });
+prototypeMatrixButton.addEventListener("click", () => {
+  setPrototype("matrix");
+});
 audioToggleButton.addEventListener("click", toggleSpotAudio);
 recordButton.addEventListener("click", startShadowRecording);
 stopRecordButton.addEventListener("click", stopShadowRecording);
+downloadRecordButton.addEventListener("click", handleDownloadLastRecording);
+shareRecordButton.addEventListener("click", handleShareLastRecording);
 shareButton.addEventListener("click", shareCurrentPrototype);
 
 loadPresetButton.addEventListener("click", async () => {
@@ -1953,6 +2337,10 @@ landmarksOnlyButton.addEventListener("click", () => {
 layerMixRange.addEventListener("input", (event) => {
   state.layerMix = Number(event.target.value);
   updateLayerMixUi();
+});
+matrixFaceRange.addEventListener("input", (event) => {
+  state.matrixFaceMix = Number(event.target.value);
+  updateMatrixFaceUi();
 });
 
 modelFileInput.addEventListener("change", async (event) => {
@@ -1982,6 +2370,7 @@ if (initialPrototype) {
 setPreviewMode("video-landmarks");
 setCameraButtonState("Pronta al tracking", false);
 updateLayerMixUi();
+updateMatrixFaceUi();
 state.recordingMimeType = getRecorderMimeType() || "video/webm";
 updatePrototypeUi();
 updateRecordingUi();
@@ -1994,4 +2383,5 @@ window.addEventListener("beforeunload", () => {
   stopWebcam();
   spotAudio.pause();
   if (state.activeObjectUrl) URL.revokeObjectURL(state.activeObjectUrl);
+  if (recordingPreviewUrl) URL.revokeObjectURL(recordingPreviewUrl);
 });

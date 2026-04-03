@@ -79,6 +79,15 @@
           >
             Layers
           </button>
+          <button
+            id="prototype-matrix"
+            class="prototype-option"
+            type="button"
+            role="tab"
+            aria-selected="false"
+          >
+            Matrix
+          </button>
         </div>
 
         <div class="hero-actions">
@@ -95,22 +104,6 @@
             <span class="audio-cta-copy">
               <span class="audio-cta-label">Ascolta lo spot</span>
               <span class="audio-cta-state" id="audio-cta-state">Play</span>
-            </span>
-          </button>
-
-          <button id="record-button" class="record-cta is-hidden" type="button">
-            <span class="record-cta-icon" aria-hidden="true">●</span>
-            <span class="record-cta-copy">
-              <span class="record-cta-label">REC scena Tabù</span>
-              <span class="record-cta-state" id="record-cta-state">Video + spot</span>
-            </span>
-          </button>
-
-          <button id="stop-record-button" class="record-cta record-cta--stop is-hidden" type="button">
-            <span class="record-cta-icon" aria-hidden="true">■</span>
-            <span class="record-cta-copy">
-              <span class="record-cta-label">STOP registrazione</span>
-              <span class="record-cta-state" id="stop-record-cta-state">Scarica file</span>
             </span>
           </button>
         </div>
@@ -148,6 +141,70 @@
               </div>
             </div>
           </details>
+
+          <div class="preview-actions">
+            <section id="matrix-face-card" class="layer-mix-card is-hidden">
+              <div class="layer-mix-head">
+                <div>
+                  <span class="status-label">Volto Matrix</span>
+                  <strong>Da codice a realistico</strong>
+                </div>
+                <strong id="matrix-face-value" class="layer-mix-value">25%</strong>
+              </div>
+
+              <label class="layer-mix-label" for="matrix-face-range">
+                Regola quanto il volto usa la struttura dei landmark oppure la luminosita reale della webcam.
+              </label>
+              <input id="matrix-face-range" type="range" min="0" max="100" step="1" value="25" />
+
+              <div class="layer-mix-scale" aria-hidden="true">
+                <span>0% Landmark</span>
+                <span>100% Realistico</span>
+              </div>
+            </section>
+
+            <button id="record-button" class="record-cta is-hidden" type="button">
+              <span class="record-cta-icon" aria-hidden="true">●</span>
+              <span class="record-cta-copy">
+                <span class="record-cta-label">REC scena Tabù</span>
+                <span class="record-cta-state" id="record-cta-state">Video + spot</span>
+              </span>
+            </button>
+
+            <button id="stop-record-button" class="record-cta record-cta--stop is-hidden" type="button">
+              <span class="record-cta-icon" aria-hidden="true">■</span>
+              <span class="record-cta-copy">
+                <span class="record-cta-label">STOP registrazione</span>
+                <span class="record-cta-state" id="stop-record-cta-state">Scarica file</span>
+              </span>
+            </button>
+
+            <button id="download-record-button" class="record-cta record-cta--download is-hidden" type="button">
+              <span class="record-cta-icon" aria-hidden="true">↓</span>
+              <span class="record-cta-copy">
+                <span class="record-cta-label">Scarica file</span>
+                <span class="record-cta-state" id="download-record-cta-state">Ultima registrazione</span>
+              </span>
+            </button>
+
+            <section id="recording-preview-card" class="recording-preview-card is-hidden">
+              <div class="layer-mix-head">
+                <div>
+                  <span class="status-label">Anteprima video</span>
+                  <strong>Ultima registrazione</strong>
+                </div>
+              </div>
+              <video id="recording-preview-video" controls playsinline preload="metadata"></video>
+            </section>
+
+            <button id="share-record-button" class="record-cta record-cta--share is-hidden" type="button">
+              <span class="record-cta-icon" aria-hidden="true">↗</span>
+              <span class="record-cta-copy">
+                <span class="record-cta-label">Condividi con...</span>
+                <span class="record-cta-state" id="share-record-cta-state">File registrato</span>
+              </span>
+            </button>
+          </div>
         </div>
 
         <div class="stage-tools">

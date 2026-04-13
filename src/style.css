@@ -948,12 +948,7 @@ h1 {
   object-fit: cover;
 }
 
-#webcam {
-  transform: scaleX(-1);
-}
-
 #webcam-overlay {
-  transform: scaleX(-1);
   pointer-events: none;
 }
 

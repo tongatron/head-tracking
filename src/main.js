@@ -1918,7 +1918,7 @@ async function startWebcam() {
 
 function normalizedToCanvas(point) {
   return {
-    x: shadowCanvas.width - point.x * shadowCanvas.width,
+    x: point.x * shadowCanvas.width,
     y: point.y * shadowCanvas.height,
     z: point.z ?? 0,
   };

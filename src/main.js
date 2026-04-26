@@ -2348,6 +2348,8 @@ function drawMirroredVideoToShadowCanvas(alpha) {
   if (webcam.readyState < 2 || alpha <= 0) return;
   shadowContext.save();
   shadowContext.globalAlpha = alpha;
+  shadowContext.translate(shadowCanvas.width, 0);
+  shadowContext.scale(-1, 1);
   shadowContext.drawImage(webcam, 0, 0, shadowCanvas.width, shadowCanvas.height);
   shadowContext.restore();
 }
